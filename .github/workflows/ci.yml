@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Grant execute on gradlew
+        working-directory: mitra
+        run: chmod +x ./gradlew
+
+      - name: Unit tests
+        working-directory: mitra
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Android lint
+        working-directory: mitra
+        run: ./gradlew :app:lintDebug --stacktrace
+
+      - name: Assemble debug APK
+        working-directory: mitra
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: mitra/app/build/reports/tests/

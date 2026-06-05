@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose draws its own Material 3 surfaces; this is just the window shell. -->
+    <style name="Theme.Mitra" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

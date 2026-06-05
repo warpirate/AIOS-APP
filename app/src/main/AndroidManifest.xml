@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      INTERNET is declared SOLELY for the one-time model download (ModelDownloader.kt — the single
+      lint-allowlisted network file). After first run the app makes no network calls. See
+      docs/adr/0008-internet-permission-model-download.md. A future no-INTERNET build flavor will
+      omit this permission and require the model to be sideloaded.
+      Flashlight uses CameraManager.setTorchMode, which does NOT require CAMERA.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      WRITE_SETTINGS is a "special" permission — declared here but the user must explicitly grant it
+      via Settings.ACTION_MANAGE_WRITE_SETTINGS. SetBrightness opens that page on the first call when
+      Settings.System.canWrite() returns false. Used solely for screen brightness; never to read.
+    -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
+
+    <!--
+      Android 11+ package visibility. Without these the system clock app is invisible to our
+      PackageManager probes (StartTimer falls through to its last-resort path on every device),
+      and launcher app discovery (open_app) returns an empty list.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SET_TIMER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SET_ALARM" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:label="Mitra"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Mitra">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

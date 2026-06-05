@@ -1,0 +1,112 @@
+# =============================================================================
+# Mitra .gitignore
+# =============================================================================
+
+# ----- Project-specific ------------------------------------------------------
+
+# Model files — never commit weights
+models/
+*.tflite
+*.task
+*.gguf
+*.safetensors
+*.bin
+
+# Training outputs (datasets are tracked; runs are not)
+training/runs/
+training/checkpoints/
+training/outputs/
+training/.cache/
+
+# Local benchmark results
+benchmarks/results/
+*.benchmark.json
+
+# Signing keys — NEVER commit
+*.jks
+*.keystore
+keystore.properties
+release-keys/
+
+# ----- Android / Gradle ------------------------------------------------------
+
+# Built application files
+*.apk
+*.aab
+*.ap_
+*.aar
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+bin/
+gen/
+out/
+build/
+release/
+
+# Gradle files
+.gradle/
+.gradletasknamecache
+gradle-app.setting
+
+# Local configuration
+local.properties
+
+# Proguard / R8
+proguard/
+*.txt.original
+
+# Log files
+*.log
+
+# Android Studio captures
+captures/
+
+# IntelliJ project files
+*.iml
+*.ipr
+*.iws
+.idea/
+!.idea/codeStyles
+!.idea/codeStyles/*.xml
+!.idea/inspectionProfiles
+!.idea/inspectionProfiles/*.xml
+
+# Lint
+lint/intermediates/
+lint/generated/
+lint/outputs/
+lint/tmp/
+lint/reports/
+
+# ----- Python (training scripts) --------------------------------------------
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ----- OS / Editor cruft -----------------------------------------------------
+
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
