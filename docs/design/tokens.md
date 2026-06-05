@@ -70,6 +70,8 @@ The dark palette is *warm-dark*, not *blue-dark*. Every neutral has a faint red-
 
 - **Primary is rare.** One primary-colored element per screen ideally — the main CTA, the active tab, the send button. If everything is primary, nothing is.
 - **Success / warning / danger / info are semantic, not decorative.** Never use `success` green just because something is "good." Use it only for explicit state changes (action completed, permission granted, etc.).
+- **The semantic palette (success/warning/danger/info) is calibrated for use as TEXT on `bg`, not as a filled background with white text.** The contrast ratios in the dark-mode table are computed against `bg` — they're correct for icon strokes, text, and 1dp accent lines. **If you fill a pill / chip / badge with `success`/`warning`/`danger`/`info`, the text MUST be `bg` (`#1A1715` dark / `#1F1C1A` light) — never `#FFFFFF`.** White-on-fill drops to 2.2–3.2:1 and fails AA. This rule applies to every state pill, every banner, every filled chip. (See `a11y-audit-2026-06-05.md` for the failures that drove this rule.)
+- **`warning` and `primary` on `surfaceVariant` are marginal in light mode** (4.28:1 / 4.46:1 vs 4.5:1 target). Avoid this pairing for body text; reserve for headings, icons, or text strictly ≥ 18sp/600 weight (large-text relief, 3:1).
 - **Outline > shadow for separation in light mode.** Use a 1dp `outline` border for cards in light mode; reserve shadow elevation for modals and overlays.
 - **Surface containers stack via tint, not stroke, in dark mode.** Dark mode uses subtle background lifts (`bg` → `surface` → `surfaceVariant`) instead of borders.
 

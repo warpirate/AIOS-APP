@@ -162,6 +162,7 @@ See [plan.md](plan.md) for the milestone-by-milestone breakdown. Always link wor
   - Screen inventory + state matrix + Mermaid flow: `docs/design/screens.md`
   - Accessibility baseline (WCAG 2.2 AA, TalkBack, 200% font, RTL): `docs/design/a11y.md`
 - **Competitive teardown** (UX patterns from Gemini / Krutrim / Sarvam / etc.): `docs/research/competitive-teardown.md`
+- **Latest a11y audit findings** (rolling — review before doing UI work): `docs/design/a11y-audit-2026-06-05.md`
 
 ## Working with Claude Code in this repo
 
