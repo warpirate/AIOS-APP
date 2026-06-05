@@ -47,8 +47,13 @@ class AuditLogTest {
     @Test
     fun `Entry data class only has whitelisted fields`() {
         // Privacy invariant: no field on an Entry can ever carry user content. This test fails
-        // the moment someone adds a String field that could leak (args, message body, contact name).
-        val fields = AuditLog.Entry::class.java.declaredFields.map { it.name }.toSet()
-        assertEquals(setOf("toolName", "sideEffect", "ok", "timestampMs"), fields)
+        // the moment someone adds a property that could leak (args, message body, contact name).
+        // We check Kotlin-declared member properties, not raw JVM fields (which include synthetic
+        // entries from the Kotlin compiler / Companion objects / kotlinx serialization, etc).
+        val props = AuditLog.Entry::class.members
+            .filterIsInstance<kotlin.reflect.KProperty1<AuditLog.Entry, *>>()
+            .map { it.name }
+            .toSet()
+        assertEquals(setOf("toolName", "sideEffect", "ok", "timestampMs"), props)
     }
 }
