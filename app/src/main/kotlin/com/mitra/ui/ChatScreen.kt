@@ -180,6 +180,7 @@ private fun actionTitle(call: ToolCall): String = when (call.name) {
     "start_timer" -> "Start timer"
     "open_url" -> "Open link"
     "open_app" -> "Open app"
+    "open_settings" -> "Open settings"
     "set_media_volume" -> "Set volume"
     "set_brightness" -> "Set brightness"
     else -> call.name.replace('_', ' ').replaceFirstChar { it.uppercase() }
@@ -194,6 +195,7 @@ private fun actionDetail(call: ToolCall): String = when (call.name) {
     "start_timer" -> "${(call.args["seconds"] as? Number)?.toInt() ?: "?"} seconds"
     "open_url" -> (call.args["url"] as? String).orEmpty()
     "open_app" -> (call.args["name"] as? String) ?: (call.args["package_name"] as? String).orEmpty()
+    "open_settings" -> (call.args["panel"] as? String)?.replace('_', ' ').orEmpty()
     "set_media_volume" -> "to ${(call.args["level"] as? Number)?.toInt() ?: "?"}%"
     "set_brightness" -> "to ${(call.args["level"] as? Number)?.toInt() ?: "?"}%"
     "toggle_flashlight" -> "on your device"

@@ -108,4 +108,44 @@ class IntentParserTest {
     fun `chit-chat falls through to the LLM`() {
         assertNull(parser.route("how are you today"))
     }
+
+    @Test
+    fun `bluetooth opens the settings panel not the app`() {
+        val c = parser.route("Bluetooth?")
+        assertEquals("open_settings", c?.name)
+        assertEquals("bluetooth", c?.args?.get("panel"))
+    }
+
+    @Test
+    fun `wifi opens the settings panel`() {
+        val c = parser.route("wifi off")
+        assertEquals("open_settings", c?.name)
+        assertEquals("wifi", c?.args?.get("panel"))
+    }
+
+    @Test
+    fun `do not disturb opens DND panel`() {
+        val c = parser.route("turn on do not disturb")
+        assertEquals("open_settings", c?.name)
+        assertEquals("dnd", c?.args?.get("panel"))
+    }
+
+    @Test
+    fun `airplane mode opens airplane panel`() {
+        val c = parser.route("airplane mode")
+        assertEquals("open_settings", c?.name)
+        assertEquals("airplane", c?.args?.get("panel"))
+    }
+
+    @Test
+    fun `brightness still wins over display panel`() {
+        val c = parser.route("set brightness to 30")
+        assertEquals("set_brightness", c?.name)
+    }
+
+    @Test
+    fun `flashlight wins over panel even if torch mentioned`() {
+        val c = parser.route("turn off the flashlight")
+        assertEquals("toggle_flashlight", c?.name)
+    }
 }

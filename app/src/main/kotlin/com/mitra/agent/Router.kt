@@ -25,6 +25,12 @@ class IntentParser : Router {
             return ToolCall("open_url", mapOf("url" to it.groupValues[1].trim('.', ',', '!', '?')))
         }
 
+        // System settings panel — handles the cases the brain misfires on, plus naked nouns
+        // like "bluetooth?" / "wifi off" / "dnd". Mitra cannot toggle hardware directly; opening
+        // the system page is the honest near-term answer until M6's accessibility path lands.
+        // Check before flashlight/timer/alarm/volume/brightness so the panel intent wins.
+        resolveSettingsPanel(t)?.let { return ToolCall("open_settings", mapOf("panel" to it)) }
+
         // Flashlight / torch
         if (listOf("flashlight", "flash light", "torch").any { it in t } ||
             (t.contains("light") && listOf("turn", "switch", "on", "off").any { it in t })
@@ -87,6 +93,47 @@ class IntentParser : Router {
             m.groupValues[2].startsWith("m") -> n * 60
             else -> n
         }
+    }
+
+    /**
+     * Map free-text mentions of system features to a settings panel name. Only fires when the
+     * user mentions a hardware/system word in a context that suggests they want it changed.
+     * Returns null when the request is clearly about a tool the app actually owns (volume, etc).
+     */
+    private fun resolveSettingsPanel(t: String): String? {
+        // Skip if the message is clearly handled by an in-app tool already.
+        if ("flashlight" in t || "torch" in t) return null
+        if ("alarm" in t || "timer" in t || "countdown" in t || "wake me" in t) return null
+        if ("brightness" in t || "dim the screen" in t) return null
+        // "volume" deliberately allowed to flow through — set_media_volume runs first only when the
+        // request is concrete (a number / mute / max). The plain word "volume?" falls to sound panel.
+
+        val keywords = listOf(
+            "bluetooth" to "bluetooth",
+            "wi-fi" to "wifi",
+            "wi fi" to "wifi",
+            "wifi" to "wifi",
+            "do not disturb" to "dnd",
+            "dnd" to "dnd",
+            "silent mode" to "dnd",
+            "zen mode" to "dnd",
+            "airplane" to "airplane",
+            "flight mode" to "airplane",
+            "aeroplane" to "airplane",
+            "mobile data" to "mobile_data",
+            "cellular" to "mobile_data",
+            "data roaming" to "mobile_data",
+            "hotspot" to "hotspot",
+            "tethering" to "hotspot",
+            "nfc" to "nfc",
+            "location" to "location",
+            "gps" to "location",
+            "battery saver" to "battery",
+            "power saver" to "battery",
+            "data usage" to "data_usage",
+            "accessibility" to "accessibility",
+        )
+        return keywords.firstOrNull { (kw, _) -> kw in t }?.second
     }
 
     /** "7:30", "7 30", "6am", "18:00", "7" -> (hour, minute) in 24-hour form. */

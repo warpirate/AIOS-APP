@@ -59,9 +59,14 @@ class LiteRtBrain(modelPath: String, cacheDir: String) {
             @ToolParam(description = "the web address / URL to open") url: String,
         ): Map<String, Any> = mapOf("ok" to true)
 
-        @Tool(description = "Use this when the user wants to open, launch, or start an installed app by name.")
+        @Tool(description = "Use this ONLY when the user explicitly says open / launch / start a named app like Spotify, Camera, WhatsApp. Do NOT use this for hardware toggles, system settings, Bluetooth, Wi-Fi, brightness, alarms, or single-word nouns — those have their own tools or none at all.")
         fun open_app(
-            @ToolParam(description = "the visible app name (e.g. Spotify) or its package id") name: String,
+            @ToolParam(description = "the visible app name (e.g. Spotify) or its package id, only when an explicit open/launch verb was used") name: String,
+        ): Map<String, Any> = mapOf("ok" to true)
+
+        @Tool(description = "Use this when the user wants to adjust, see, or open a system settings page — Bluetooth, Wi-Fi, Do Not Disturb, airplane mode, mobile data, brightness, sound, display, location, battery, apps, storage. Mitra cannot toggle these directly; this opens the Android page where the user does it.")
+        fun open_settings(
+            @ToolParam(description = "the panel: bluetooth, wifi, dnd, airplane, mobile_data, brightness, sound, display, location, battery, apps, storage") panel: String,
         ): Map<String, Any> = mapOf("ok" to true)
 
         @Tool(description = "Use this when the user wants to change, raise, lower, mute, or set the media or music volume.")

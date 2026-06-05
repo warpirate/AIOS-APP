@@ -63,6 +63,7 @@ proguard/
 
 # Log files
 *.log
+build-log.txt
 
 # Android Studio captures
 captures/

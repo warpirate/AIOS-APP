@@ -14,6 +14,7 @@ object ToolRegistry {
         StartTimer(context),
         OpenUrl(context),
         OpenApp(context),
+        OpenSettings(context),
         SetMediaVolume(context),
         SetBrightness(context),
     )

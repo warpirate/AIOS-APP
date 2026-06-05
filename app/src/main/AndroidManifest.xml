@@ -38,6 +38,15 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
+        <!-- Settings panels for the open_settings tool. Android 11+ visibility rule. -->
+        <intent><action android:name="android.settings.SETTINGS" /></intent>
+        <intent><action android:name="android.settings.BLUETOOTH_SETTINGS" /></intent>
+        <intent><action android:name="android.settings.WIFI_SETTINGS" /></intent>
+        <intent><action android:name="android.settings.AIRPLANE_MODE_SETTINGS" /></intent>
+        <intent><action android:name="android.settings.SOUND_SETTINGS" /></intent>
+        <intent><action android:name="android.settings.DISPLAY_SETTINGS" /></intent>
+        <intent><action android:name="android.settings.LOCATION_SOURCE_SETTINGS" /></intent>
+        <intent><action android:name="android.settings.ZEN_MODE_PRIORITY_SETTINGS" /></intent>
     </queries>
 
     <application
