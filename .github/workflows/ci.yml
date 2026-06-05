@@ -26,19 +26,15 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Grant execute on gradlew
-        working-directory: mitra
         run: chmod +x ./gradlew
 
       - name: Unit tests
-        working-directory: mitra
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
       - name: Android lint
-        working-directory: mitra
         run: ./gradlew :app:lintDebug --stacktrace
 
       - name: Assemble debug APK
-        working-directory: mitra
         run: ./gradlew :app:assembleDebug --stacktrace
 
       - name: Upload test reports on failure
@@ -46,4 +42,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-reports
-          path: mitra/app/build/reports/tests/
+          path: app/build/reports/tests/
