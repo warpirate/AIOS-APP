@@ -19,6 +19,23 @@
     <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
 
     <!--
+      ACCESS_NOTIFICATION_POLICY is a "special" permission like WRITE_SETTINGS — declared here,
+      granted by the user via Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS. Used by SetDnd
+      (Do Not Disturb on/off) and SetRingerMode (silent mode requires it on Android 7+).
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+
+    <!--
+      Bluetooth permissions. BLUETOOTH_ADMIN auto-grants below API 31. BLUETOOTH_CONNECT is a
+      runtime permission on API 31+ — Mitra checks self-permission and bounces to app details
+      when missing. On API 33+ Bluetooth toggle is restricted regardless; SetBluetooth falls back
+      to the Bluetooth settings page.
+    -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!--
       Android 11+ package visibility. Without these the system clock app is invisible to our
       PackageManager probes (StartTimer falls through to its last-resort path on every device),
       and launcher app discovery (open_app) returns an empty list.

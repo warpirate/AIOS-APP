@@ -15,11 +15,14 @@ import com.mitra.agent.IntentParser
 import com.mitra.inference.LiteRtBrain
 import com.mitra.inference.ModelDownloader
 import com.mitra.inference.ModelRegistry
+import com.mitra.permissions.Onboarding
 import com.mitra.tools.ToolRegistry
 import com.mitra.ui.ChatScreen
 import com.mitra.ui.DownloadScreen
 import com.mitra.ui.ErrorScreen
 import com.mitra.ui.LoadingBrainScreen
+import com.mitra.ui.PermissionsScreen
+import com.mitra.ui.SettingsScreen
 import com.mitra.ui.WelcomeScreen
 import com.mitra.ui.theme.MitraTheme
 import kotlinx.coroutines.CancellationException
@@ -27,7 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-private enum class Phase { BOOT, WELCOME, DOWNLOAD, LOADING, CHAT, ERROR }
+private enum class Phase { BOOT, WELCOME, DOWNLOAD, LOADING, PERMISSIONS, CHAT, SETTINGS, ERROR }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,6 +53,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun AppRoot(modelFile: File, cacheDir: String, agent: AgentLoop) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     var phase by remember { mutableStateOf(Phase.BOOT) }
     var brain by remember { mutableStateOf<LiteRtBrain?>(null) }
 
@@ -83,6 +87,8 @@ private fun AppRoot(modelFile: File, cacheDir: String, agent: AgentLoop) {
     }
 
     // Load the model into the brain off the UI thread; fall back to keyword mode if it fails.
+    // After loading: first-run users go through the PERMISSIONS wizard once. Anyone who already
+    // finished (or skipped) the wizard goes straight to CHAT — they manage perms via SETTINGS.
     LaunchedEffect(phase) {
         if (phase == Phase.LOADING) {
             brain = withContext(Dispatchers.IO) {
@@ -92,7 +98,7 @@ private fun AppRoot(modelFile: File, cacheDir: String, agent: AgentLoop) {
                     null
                 }
             }
-            phase = Phase.CHAT
+            phase = if (Onboarding.isComplete(ctx)) Phase.CHAT else Phase.PERMISSIONS
         }
     }
 
@@ -107,7 +113,18 @@ private fun AppRoot(modelFile: File, cacheDir: String, agent: AgentLoop) {
             onPauseResume = { paused = !paused },
             onContinue = { phase = Phase.LOADING },
         )
-        Phase.CHAT -> ChatScreen(brain = brain, agent = agent)
+        Phase.PERMISSIONS -> PermissionsScreen(
+            onContinue = {
+                Onboarding.markComplete(ctx)
+                phase = Phase.CHAT
+            },
+        )
+        Phase.CHAT -> ChatScreen(
+            brain = brain,
+            agent = agent,
+            onOpenSettings = { phase = Phase.SETTINGS },
+        )
+        Phase.SETTINGS -> SettingsScreen(onBack = { phase = Phase.CHAT })
         Phase.ERROR -> ErrorScreen(
             message = errorMsg,
             onRetry = {
@@ -116,7 +133,7 @@ private fun AppRoot(modelFile: File, cacheDir: String, agent: AgentLoop) {
                 paused = false
                 phase = Phase.DOWNLOAD
             },
-            onSkip = { phase = Phase.CHAT }, // keyword mode, no brain
+            onSkip = { phase = Phase.PERMISSIONS }, // keyword mode, no brain — still grant perms once
         )
     }
 }

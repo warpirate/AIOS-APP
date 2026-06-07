@@ -17,5 +17,10 @@ object ToolRegistry {
         OpenSettings(context),
         SetMediaVolume(context),
         SetBrightness(context),
+        SetDnd(context),
+        SetRingerMode(context),
+        SetAutoRotate(context),
+        SetScreenTimeout(context),
+        SetBluetooth(context),
     )
 }

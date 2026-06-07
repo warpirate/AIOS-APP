@@ -25,10 +25,24 @@ class IntentParser : Router {
             return ToolCall("open_url", mapOf("url" to it.groupValues[1].trim('.', ',', '!', '?')))
         }
 
-        // System settings panel — handles the cases the brain misfires on, plus naked nouns
-        // like "bluetooth?" / "wifi off" / "dnd". Mitra cannot toggle hardware directly; opening
-        // the system page is the honest near-term answer until M6's accessibility path lands.
-        // Check before flashlight/timer/alarm/volume/brightness so the panel intent wins.
+        // Real-API tools BEFORE the panel resolver. Each requires an explicit on/off verb so a
+        // bare noun ("bluetooth?", "dnd") still falls through to the panel resolver below.
+        explicitToggle(t, listOf("dnd", "do not disturb", "zen mode"))?.let {
+            return ToolCall("set_dnd", mapOf("on" to it))
+        }
+        explicitToggle(t, listOf("bluetooth"))?.let {
+            return ToolCall("set_bluetooth", mapOf("on" to it))
+        }
+        explicitToggle(t, listOf("auto rotate", "auto-rotate", "rotation"))?.let {
+            return ToolCall("set_auto_rotate", mapOf("on" to it))
+        }
+        ringerMode(t)?.let { return ToolCall("set_ringer_mode", mapOf("mode" to it)) }
+        if ("screen timeout" in t || "screen sleep" in t || ("screen" in t && "off after" in t)) {
+            durationSeconds(t)?.let { return ToolCall("set_screen_timeout", mapOf("seconds" to it)) }
+        }
+
+        // System settings panel — handles cases without an explicit on/off verb, plus naked nouns
+        // ("bluetooth?", "dnd") and toggles Android refuses 3rd-party apps (wifi / mobile / airplane).
         resolveSettingsPanel(t)?.let { return ToolCall("open_settings", mapOf("panel" to it)) }
 
         // Flashlight / torch
@@ -81,6 +95,39 @@ class IntentParser : Router {
             }
         }
 
+        return null
+    }
+
+    /**
+     * Returns true / false if the input mentions any keyword AND an explicit on/off verb.
+     * Null when no verb is present (the panel resolver below can then handle it).
+     */
+    private fun explicitToggle(t: String, keywords: List<String>): Boolean? {
+        if (keywords.none { it in t }) return null
+        val off = listOf("off", "disable", "stop", "kill", "turn off", "switch off", "lock").any { it in t }
+        val on = listOf("turn on", "switch on", "enable", "start", "connect", "unlock").any { it in t } ||
+            (" on" in t || t.endsWith(" on") || t.startsWith("on "))
+        return when {
+            off -> false
+            on -> true
+            else -> null
+        }
+    }
+
+    /**
+     * Detect explicit ringer-mode requests: "vibrate", "set ringer to silent", "ring mode",
+     * "mute the phone" (distinct from "mute media" which goes to set_media_volume).
+     */
+    private fun ringerMode(t: String): String? {
+        if ("vibrate" in t || "vibration" in t) return "vibrate"
+        if ("ringer" in t || "ring mode" in t || "silent mode" in t || "mute the phone" in t || "mute phone" in t) {
+            return when {
+                "silent" in t || "mute" in t -> "silent"
+                "vibrate" in t -> "vibrate"
+                "ring" in t || "loud" in t || "normal" in t -> "ring"
+                else -> null
+            }
+        }
         return null
     }
 

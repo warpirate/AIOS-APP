@@ -78,6 +78,31 @@ class LiteRtBrain(modelPath: String, cacheDir: String) {
         fun set_brightness(
             @ToolParam(description = "brightness percentage, 0-100") level: Int,
         ): Map<String, Any> = mapOf("ok" to true)
+
+        @Tool(description = "Use this when the user wants to turn Do Not Disturb on or off.")
+        fun set_dnd(
+            @ToolParam(description = "true to turn DND ON, false to turn OFF") on: Boolean,
+        ): Map<String, Any> = mapOf("ok" to true)
+
+        @Tool(description = "Use this when the user wants to set the ringer to ring, vibrate, or silent.")
+        fun set_ringer_mode(
+            @ToolParam(description = "one of: ring, vibrate, silent") mode: String,
+        ): Map<String, Any> = mapOf("ok" to true)
+
+        @Tool(description = "Use this when the user wants to turn screen auto-rotation on or off.")
+        fun set_auto_rotate(
+            @ToolParam(description = "true to enable auto-rotate, false to lock orientation") on: Boolean,
+        ): Map<String, Any> = mapOf("ok" to true)
+
+        @Tool(description = "Use this when the user wants to change how long the screen stays on before sleeping.")
+        fun set_screen_timeout(
+            @ToolParam(description = "screen-off timeout in seconds, 15 to 1800") seconds: Int,
+        ): Map<String, Any> = mapOf("ok" to true)
+
+        @Tool(description = "Use this when the user wants to turn Bluetooth on or off.")
+        fun set_bluetooth(
+            @ToolParam(description = "true to turn Bluetooth ON, false to turn OFF") on: Boolean,
+        ): Map<String, Any> = mapOf("ok" to true)
         // Real execution is dispatched by AgentLoop -> ToolRegistry, not here.
     }
 
