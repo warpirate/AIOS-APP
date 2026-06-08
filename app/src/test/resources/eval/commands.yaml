@@ -1,0 +1,342 @@
+# Mitra eval starter set — Phase 0
+# 50 commands: 6 chit-chat negatives + 44 tool cases covering all 13 V1 tools.
+# Format: id, utterance, gold (ordered list of tool calls), language, optional multi_step flag.
+
+- id: "0001"
+  utterance: "turn on the flashlight"
+  gold:
+    - tool: toggle_flashlight
+      args: { on: true }
+  language: en
+
+- id: "0002"
+  utterance: "torch off"
+  gold:
+    - tool: toggle_flashlight
+      args: { on: false }
+  language: en
+
+- id: "0003"
+  utterance: "turn the flashlight off"
+  gold:
+    - tool: toggle_flashlight
+      args: { on: false }
+  language: en
+
+- id: "0004"
+  utterance: "set an alarm for 7:30 am"
+  gold:
+    - tool: set_alarm
+      args: { hour: 7, minute: 30 }
+  language: en
+
+- id: "0005"
+  utterance: "wake me at 6 am"
+  gold:
+    - tool: set_alarm
+      args: { hour: 6, minute: 0 }
+  language: en
+
+- id: "0006"
+  utterance: "wake me at 6 pm"
+  gold:
+    - tool: set_alarm
+      args: { hour: 18, minute: 0 }
+  language: en
+
+- id: "0007"
+  utterance: "start a 5 minute timer"
+  gold:
+    - tool: start_timer
+      args: { seconds: 300 }
+  language: en
+
+- id: "0008"
+  utterance: "10 second countdown"
+  gold:
+    - tool: start_timer
+      args: { seconds: 10 }
+  language: en
+
+- id: "0009"
+  utterance: "1 hour timer"
+  gold:
+    - tool: start_timer
+      args: { seconds: 3600 }
+  language: en
+
+- id: "0010"
+  utterance: "open youtube.com"
+  gold:
+    - tool: open_url
+      args: { url: "youtube.com" }
+  language: en
+
+- id: "0011"
+  utterance: "go to example.org"
+  gold:
+    - tool: open_url
+      args: { url: "example.org" }
+  language: en
+
+- id: "0012"
+  utterance: "open spotify"
+  gold:
+    - tool: open_app
+      args: { name: "spotify" }
+  language: en
+
+- id: "0013"
+  utterance: "launch the calculator app"
+  gold:
+    - tool: open_app
+      args: { name: "calculator" }
+  language: en
+
+- id: "0014"
+  utterance: "open whatsapp"
+  gold:
+    - tool: open_app
+      args: { name: "whatsapp" }
+  language: en
+
+- id: "0015"
+  utterance: "bluetooth?"
+  gold:
+    - tool: open_settings
+      args: { panel: "bluetooth" }
+  language: en
+
+- id: "0016"
+  utterance: "wifi off"
+  gold:
+    - tool: open_settings
+      args: { panel: "wifi" }
+  language: en
+
+- id: "0017"
+  utterance: "airplane mode"
+  gold:
+    - tool: open_settings
+      args: { panel: "airplane" }
+  language: en
+
+- id: "0018"
+  utterance: "mobile data settings"
+  gold:
+    - tool: open_settings
+      args: { panel: "mobile_data" }
+  language: en
+
+- id: "0019"
+  utterance: "hotspot"
+  gold:
+    - tool: open_settings
+      args: { panel: "hotspot" }
+  language: en
+
+- id: "0020"
+  utterance: "set volume to 40%"
+  gold:
+    - tool: set_media_volume
+      args: { level: 40 }
+  language: en
+
+- id: "0021"
+  utterance: "mute volume"
+  gold:
+    - tool: set_media_volume
+      args: { level: 0 }
+  language: en
+
+- id: "0022"
+  utterance: "max volume"
+  gold:
+    - tool: set_media_volume
+      args: { level: 100 }
+  language: en
+
+- id: "0023"
+  utterance: "set brightness to 40%"
+  gold:
+    - tool: set_brightness
+      args: { level: 40 }
+  language: en
+
+- id: "0024"
+  utterance: "dim the screen"
+  gold:
+    - tool: set_brightness
+      args: { level: 10 }
+  language: en
+
+- id: "0025"
+  utterance: "max brightness"
+  gold:
+    - tool: set_brightness
+      args: { level: 100 }
+  language: en
+
+- id: "0026"
+  utterance: "turn on do not disturb"
+  gold:
+    - tool: set_dnd
+      args: { on: true }
+  language: en
+
+- id: "0027"
+  utterance: "turn off dnd"
+  gold:
+    - tool: set_dnd
+      args: { on: false }
+  language: en
+
+- id: "0028"
+  utterance: "zen mode off"
+  gold:
+    - tool: set_dnd
+      args: { on: false }
+  language: en
+
+- id: "0029"
+  utterance: "vibrate only"
+  gold:
+    - tool: set_ringer_mode
+      args: { mode: "vibrate" }
+  language: en
+
+- id: "0030"
+  utterance: "set ringer to silent"
+  gold:
+    - tool: set_ringer_mode
+      args: { mode: "silent" }
+  language: en
+
+- id: "0031"
+  utterance: "ringer to ring"
+  gold:
+    - tool: set_ringer_mode
+      args: { mode: "ring" }
+  language: en
+
+- id: "0032"
+  utterance: "turn on auto rotate"
+  gold:
+    - tool: set_auto_rotate
+      args: { on: true }
+  language: en
+
+- id: "0033"
+  utterance: "disable auto rotation"
+  gold:
+    - tool: set_auto_rotate
+      args: { on: false }
+  language: en
+
+- id: "0034"
+  utterance: "screen timeout 30 seconds"
+  gold:
+    - tool: set_screen_timeout
+      args: { seconds: 30 }
+  language: en
+
+- id: "0035"
+  utterance: "screen sleep 5 minutes"
+  gold:
+    - tool: set_screen_timeout
+      args: { seconds: 300 }
+  language: en
+
+- id: "0036"
+  utterance: "bluetooth on"
+  gold:
+    - tool: set_bluetooth
+      args: { on: true }
+  language: en
+
+- id: "0037"
+  utterance: "turn off bluetooth"
+  gold:
+    - tool: set_bluetooth
+      args: { on: false }
+  language: en
+
+- id: "0038"
+  utterance: "switch on flashlight"
+  gold:
+    - tool: toggle_flashlight
+      args: { on: true }
+  language: en
+
+- id: "0039"
+  utterance: "kill the torch"
+  gold:
+    - tool: toggle_flashlight
+      args: { on: false }
+  language: en
+
+- id: "0040"
+  utterance: "set an alarm for 12 pm"
+  gold:
+    - tool: set_alarm
+      args: { hour: 12, minute: 0 }
+  language: en
+
+- id: "0041"
+  utterance: "set an alarm for 12 am"
+  gold:
+    - tool: set_alarm
+      args: { hour: 0, minute: 0 }
+  language: en
+
+- id: "0042"
+  utterance: "30 minute timer"
+  gold:
+    - tool: start_timer
+      args: { seconds: 1800 }
+  language: en
+
+- id: "0043"
+  utterance: "location settings"
+  gold:
+    - tool: open_settings
+      args: { panel: "location" }
+  language: en
+
+- id: "0044"
+  utterance: "battery saver"
+  gold:
+    - tool: open_settings
+      args: { panel: "battery" }
+  language: en
+
+# Chit-chat negatives — gold is empty: planner should produce no tool calls.
+- id: "9001"
+  utterance: "how are you today"
+  gold: []
+  language: en
+
+- id: "9002"
+  utterance: "what's the weather"
+  gold: []
+  language: en
+
+- id: "9003"
+  utterance: "tell me a joke"
+  gold: []
+  language: en
+
+- id: "9004"
+  utterance: "good morning"
+  gold: []
+  language: en
+
+- id: "9005"
+  utterance: "who are you"
+  gold: []
+  language: en
+
+- id: "9006"
+  utterance: "thanks"
+  gold: []
+  language: en
