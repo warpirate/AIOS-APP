@@ -8,8 +8,9 @@ import kotlinx.coroutines.flow.collect
 
 /**
  * V1 [Planner] impl: runs the brain once, takes whatever tool call (if any) it emitted, or falls
- * back to [IntentParser] if the brain only chatted. `onChunk` receives streaming chat text as it
- * arrives so [AgentRuntime] can emit [RuntimeEvent.Speaking].
+ * back to [IntentParser] if the brain only chatted. `onChunk` receives the **cumulative** chat
+ * text on each brain emission (not deltas — mirrors LiteRtBrain.chatStream which accumulates),
+ * so UI callers should overwrite, not append. AgentRuntime can use it to emit RuntimeEvent.Speaking.
  *
  * Confidence is fixed at 1.0 in V1 — there is no data yet to calibrate against. Phase 2's
  * PlanThenExecutePlanner is where confidence becomes meaningful.
