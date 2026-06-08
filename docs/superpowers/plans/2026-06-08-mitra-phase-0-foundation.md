@@ -197,7 +197,7 @@ import org.junit.Test
 class AutomationBackendTest {
     @Test
     fun `tier ordering is ManagerApi RemoteInput Deeplink A11yGesture`() {
-        // ordinal order matters — dispatcher picks highest tier first
+        // ordinal order matters — dispatcher picks lowest ordinal (cheapest tier) first
         assertEquals(0, AutomationTier.ManagerApi.ordinal)
         assertEquals(1, AutomationTier.RemoteInput.ordinal)
         assertEquals(2, AutomationTier.Deeplink.ordinal)
