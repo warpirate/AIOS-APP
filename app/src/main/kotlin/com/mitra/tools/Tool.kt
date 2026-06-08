@@ -1,5 +1,7 @@
 package com.mitra.tools
 
+import com.mitra.automation.AutomationTier
+
 /** How risky a tool's action is. Anything but [None] is gated by [com.mitra.safety.ConfirmationGate]. */
 enum class SideEffect { None, Reversible, Irreversible }
 
@@ -12,6 +14,11 @@ sealed interface ToolResult {
 interface Tool {
     val name: String
     val sideEffect: SideEffect
+
+    /** Lowest-cost backend tier that can execute this tool. Defaults to ManagerApi — all V1 tools
+     *  go through ManagerApiBackend. Later tools (e.g. WhatsApp reply) override to RemoteInput. */
+    val tier: AutomationTier get() = AutomationTier.ManagerApi
+
     fun execute(args: Map<String, Any?>): ToolResult
 }
 
