@@ -114,4 +114,15 @@ class AgentRuntimeTest {
         val events = rt.run(UserUtterance("x", "test")).toList()
         assertTrue(events.last() is RuntimeEvent.Failed)
     }
+
+    @Test
+    fun `Reversible step runs without GateRequested (V1 intentional)`() = runBlocking {
+        val plan = Plan(listOf(PlannedStep("set_brightness", mapOf("level" to 50), SideEffect.Reversible)), null, 1.0f)
+        val backend = StubBackend()
+        val rt = runtimeWith(plan, backend)
+        val events = rt.run(UserUtterance("set brightness to 50%", "test")).toList()
+        assertEquals(1, backend.dispatches.size)
+        assertTrue("Reversible must not pause on a gate in V1", events.none { it is RuntimeEvent.GateRequested })
+        assertTrue(events.last() is RuntimeEvent.Done)
+    }
 }
