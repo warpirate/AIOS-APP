@@ -28,7 +28,9 @@ jobs:
       - name: Grant execute on gradlew
         run: chmod +x ./gradlew
 
-      - name: Unit tests
+      - name: Unit tests (includes Mitra eval gate)
+        # EvalSmokeTest in com.mitra.eval gates planner+dispatch on the starter set
+        # at app/src/test/resources/eval/commands.yaml (≥80% pass required).
         run: ./gradlew :app:testDebugUnitTest --stacktrace
 
       - name: Android lint
