@@ -192,6 +192,7 @@ fun ChatScreen(
                         if (event.plan.steps.isNotEmpty()) {
                             // Drop the streaming bubble in favour of an action card.
                             if (msgIdx < items.size) items.removeAt(msgIdx)
+                            // TODO(phase-2): multi-step plans render one card per step. V1 SingleShotPlanner returns 1 step.
                             val step = event.plan.steps.first()
                             val call = ToolCall(step.toolName, step.args)
                             val id = nextId++
@@ -222,7 +223,12 @@ fun ChatScreen(
                     }
                     is RuntimeEvent.Done -> {
                         if (lastCardId == null && msgIdx < items.size) {
-                            val msg = (items[msgIdx] as? MitraMsg)?.text.orEmpty().ifBlank { event.summary }
+                            val spoken = (items[msgIdx] as? MitraMsg)?.text.orEmpty()
+                            val msg = when {
+                                spoken.isNotBlank() -> spoken
+                                event.summary == "nothing to do" -> "I'm not sure how to help with that one yet."
+                                else -> event.summary
+                            }
                             items[msgIdx] = MitraMsg(msg)
                         }
                     }
