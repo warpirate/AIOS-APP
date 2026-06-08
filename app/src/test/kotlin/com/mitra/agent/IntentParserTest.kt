@@ -124,10 +124,10 @@ class IntentParserTest {
     }
 
     @Test
-    fun `do not disturb opens DND panel`() {
+    fun `do not disturb routes to set_dnd`() {
         val c = parser.route("turn on do not disturb")
-        assertEquals("open_settings", c?.name)
-        assertEquals("dnd", c?.args?.get("panel"))
+        assertEquals("set_dnd", c?.name)
+        assertEquals(true, c?.args?.get("on"))
     }
 
     @Test
