@@ -32,13 +32,14 @@ Packages marked **(planned)** don't exist yet — they're added when the milesto
 mitra/
 ├── app/                              # Android application module
 │   ├── src/main/kotlin/com/mitra/
-│   │   ├── agent/                    # AgentLoop + IntentParser router
+│   │   ├── agent/                    # AgentRuntime + Planner + ContextStore + InvocationSource + IntentParser
+│   │   ├── automation/               # AutomationBackend tier system + ManagerApiBackend
 │   │   ├── inference/                # LiteRT-LM model hosting + ModelDownloader
-│   │   ├── tools/                    # ONE tool per file + ToolRegistry
+│   │   ├── tools/                    # ONE tool per file + ToolRegistry (declares AutomationTier)
 │   │   ├── safety/                   # ConfirmationGate + AuditLog (M2)
 │   │   ├── ui/                       # Compose UI (chat, onboarding, download)
-│   │   ├── accessibility/            # (planned, M6) AccessibilityService impl
-│   │   ├── intents/                  # (planned, M5.5) Intent dispatch helpers
+│   │   ├── accessibility/            # (planned, Phase 4) AccessibilityService impl behind AutomationBackend
+│   │   ├── intents/                  # (planned, Phase 2) Intent dispatch helpers (Deeplink tier)
 │   │   └── providers/                # (planned, M1) Content Provider wrappers
 │   ├── src/test/                     # Unit tests (JUnit 4 today)
 │   └── src/androidTest/              # (planned) Instrumentation tests
@@ -127,7 +128,7 @@ sealed interface ToolResult {
 }
 ```
 
-What the **model** sees is the `@Tool` / `@ToolParam` annotations on the matching method in `inference/LiteRtBrain.kt` `PhoneTools` (LiteRT-LM auto-generates the schema from them). The `Tool` implementation above is dispatcher-side — `AgentLoop.runCall` maps a model-emitted call to it by `name`.
+What the **model** sees is the `@Tool` / `@ToolParam` annotations on the matching method in `inference/LiteRtBrain.kt` `PhoneTools` (LiteRT-LM auto-generates the schema from them). The `Tool` implementation above is dispatcher-side — `AgentRuntime` (via `ManagerApiBackend`) maps a model-emitted call to it by `name`.
 
 ## Privacy invariants
 
