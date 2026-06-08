@@ -94,12 +94,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.mitra.agent.AgentLoop
+import com.mitra.agent.AgentRuntime
+import com.mitra.agent.GateDecision
+import com.mitra.agent.RuntimeEvent
 import com.mitra.agent.ToolCall
-import com.mitra.inference.LiteRtBrain
 import com.mitra.prefs.UserPrefs
 import com.mitra.safety.ConfirmationGate
-import com.mitra.tools.ToolResult
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -119,7 +119,11 @@ private data class ActionCard(
 private data class Suggestion(val icon: ImageVector, val title: String, val subtitle: String, val prompt: String)
 
 @Composable
-fun ChatScreen(brain: LiteRtBrain?, agent: AgentLoop, onOpenSettings: () -> Unit = {}) {
+fun ChatScreen(
+    brainReady: Boolean,
+    buildRuntime: (onChunk: (String) -> Unit) -> AgentRuntime,
+    onOpenSettings: () -> Unit = {},
+) {
     val items = remember { mutableStateListOf<ChatItem>() }
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -127,49 +131,43 @@ fun ChatScreen(brain: LiteRtBrain?, agent: AgentLoop, onOpenSettings: () -> Unit
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
+    // The runtime that is currently mid-turn (used to resume gate decisions). Null between turns.
+    var activeRuntime by remember { mutableStateOf<AgentRuntime?>(null) }
+
     LaunchedEffect(items.size) {
         if (items.isNotEmpty()) listState.animateScrollToItem(items.size - 1)
     }
 
     fun cardIndex(id: Int) = items.indexOfFirst { it is ActionCard && it.id == id }
 
-    fun finish(id: Int, result: ToolResult) {
-        val i = cardIndex(id)
-        if (i < 0) return
+    fun finishCard(id: Int, success: Boolean, detail: String) {
+        val i = cardIndex(id); if (i < 0) return
         val card = items[i] as ActionCard
-        items[i] = when (result) {
-            is ToolResult.Success -> card.copy(state = ActionState.DONE, detail = result.message)
-            is ToolResult.Failure -> card.copy(state = ActionState.FAILED, detail = result.message)
-        }
+        items[i] = card.copy(
+            state = if (success) ActionState.DONE else ActionState.FAILED,
+            detail = detail,
+        )
     }
 
     fun runCard(id: Int) {
-        val i = cardIndex(id)
-        if (i < 0) return
+        // Approve gate: tell the active runtime to proceed.
+        val i = cardIndex(id); if (i < 0) return
         val card = items[i] as ActionCard
-        val call = card.call ?: return
+        // Guard against stale resume: only Irreversible steps enter CONFIRM and own a pending gate.
+        // Reversible cards start as RUNNING — calling resume() with no active gate throws (AgentRuntime
+        // hardening commit 1c3522c). See task notes.
+        if (card.state != ActionState.CONFIRM) return
         items[i] = card.copy(state = ActionState.RUNNING)
-        scope.launch { finish(id, agent.runCall(call)) }
+        scope.launch { activeRuntime?.resume(GateDecision.Approve) }
     }
 
     fun cancelCard(id: Int) {
-        val i = cardIndex(id)
-        if (i >= 0) items[i] = (items[i] as ActionCard).copy(state = ActionState.CANCELLED)
-    }
-
-    fun addCard(call: ToolCall) {
-        val id = nextId++
-        val gated = ConfirmationGate.requiresConfirm(agent.sideEffectOf(call.name))
-        items.add(
-            ActionCard(
-                id = id,
-                title = actionTitle(call),
-                detail = actionDetail(call),
-                state = if (gated) ActionState.CONFIRM else ActionState.RUNNING,
-                call = call,
-            ),
-        )
-        if (!gated) scope.launch { finish(id, agent.runCall(call)) }
+        val i = cardIndex(id); if (i < 0) return
+        val card = items[i] as ActionCard
+        // Same stale-resume guard as runCard — only CONFIRM cards have a pending gate to cancel.
+        if (card.state != ActionState.CONFIRM) return
+        items[i] = card.copy(state = ActionState.CANCELLED)
+        scope.launch { activeRuntime?.resume(GateDecision.Cancel) }
     }
 
     fun send(textOverride: String? = null) {
@@ -178,36 +176,74 @@ fun ChatScreen(brain: LiteRtBrain?, agent: AgentLoop, onOpenSettings: () -> Unit
         input = ""
         items.add(UserMsg(text))
         busy = true
+        val msgIdx = items.size
+        items.add(MitraMsg(""))
         scope.launch {
-            if (brain != null) {
-                val msgIdx = items.size
-                items.add(MitraMsg(""))
-                var call: ToolCall? = null
-                brain.chatStream(text).collect { turn ->
-                    turn.toolCall?.let { call = it }
-                    items[msgIdx] = MitraMsg(turn.text)
-                }
-                val spoken = (items[msgIdx] as? MitraMsg)?.text.orEmpty()
-                val action = call ?: agent.parse(text)
-                when {
-                    action != null -> {
-                        items.removeAt(msgIdx)
-                        addCard(action)
-                    }
-                    spoken.isBlank() ->
-                        items[msgIdx] = MitraMsg("I'm not sure how to help with that one yet.")
-                }
-            } else {
-                val call = agent.parse(text)
-                if (call != null) addCard(call) else items.add(MitraMsg(agent.handle(text)))
+            val runtime = buildRuntime { chunk ->
+                // Update the streaming reply bubble as chunks arrive.
+                if (msgIdx < items.size) items[msgIdx] = MitraMsg(chunk)
             }
+            activeRuntime = runtime
+            var lastCardId: Int? = null
+            runtime.run(com.mitra.agent.UserUtterance(text = text, source = "chat")).collect { event ->
+                when (event) {
+                    is RuntimeEvent.Speaking -> { /* handled by onChunk */ }
+                    is RuntimeEvent.PlanReady -> {
+                        if (event.plan.steps.isNotEmpty()) {
+                            // Drop the streaming bubble in favour of an action card.
+                            if (msgIdx < items.size) items.removeAt(msgIdx)
+                            val step = event.plan.steps.first()
+                            val call = ToolCall(step.toolName, step.args)
+                            val id = nextId++
+                            lastCardId = id
+                            val gated = ConfirmationGate.requiresConfirm(step.sideEffect)
+                            items.add(
+                                ActionCard(
+                                    id = id,
+                                    title = actionTitle(call),
+                                    detail = actionDetail(call),
+                                    state = if (gated && step.sideEffect == com.mitra.tools.SideEffect.Irreversible)
+                                        ActionState.CONFIRM else ActionState.RUNNING,
+                                    call = call,
+                                ),
+                            )
+                        }
+                    }
+                    is RuntimeEvent.StepCompleted -> {
+                        val id = lastCardId ?: return@collect
+                        finishCard(
+                            id = id,
+                            success = event.result is com.mitra.automation.BackendResult.Success,
+                            detail = when (val r = event.result) {
+                                is com.mitra.automation.BackendResult.Success -> r.message
+                                is com.mitra.automation.BackendResult.Failure -> r.message
+                            },
+                        )
+                    }
+                    is RuntimeEvent.Done -> {
+                        if (lastCardId == null && msgIdx < items.size) {
+                            val msg = (items[msgIdx] as? MitraMsg)?.text.orEmpty().ifBlank { event.summary }
+                            items[msgIdx] = MitraMsg(msg)
+                        }
+                    }
+                    is RuntimeEvent.Failed -> {
+                        if (lastCardId == null && msgIdx < items.size) {
+                            items[msgIdx] = MitraMsg("Sorry — ${event.reason}")
+                        }
+                    }
+                    is RuntimeEvent.StepStarted, is RuntimeEvent.GateRequested, is RuntimeEvent.Replan -> {
+                        // No additional UI work needed in V1; gate state already on the card.
+                    }
+                }
+            }
+            activeRuntime = null
             busy = false
         }
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
-            MinimalHeader(brainReady = brain != null, onOpenSettings = onOpenSettings)
+            MinimalHeader(brainReady = brainReady, onOpenSettings = onOpenSettings)
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxWidth().weight(1f),
@@ -215,9 +251,7 @@ fun ChatScreen(brain: LiteRtBrain?, agent: AgentLoop, onOpenSettings: () -> Unit
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 if (items.isEmpty()) {
-                    item {
-                        EmptyHero(brainReady = brain != null, onQuickPrompt = { send(it) })
-                    }
+                    item { EmptyHero(brainReady = brainReady, onQuickPrompt = { send(it) }) }
                 }
                 items(items) { item ->
                     when (item) {
