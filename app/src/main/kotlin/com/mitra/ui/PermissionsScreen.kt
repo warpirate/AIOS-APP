@@ -99,17 +99,21 @@ fun PermissionsScreen(
     }
 
     val current = onboardingStatuses[currentIdx].permission
-    val totalUngranted = onboardingStatuses.count { !it.granted }
-    val stepInUngranted = onboardingStatuses.take(currentIdx + 1).count { !it.granted }
+    // Counter is position-based, not status-based. Total stays fixed at the size of the onboarding
+    // journey; current is the 1-based index of the screen the user is looking at. Re-deriving from
+    // `!it.granted` each render makes the counter jump backwards as the user grants ("Step 2 of 3"
+    // becomes "Step 1 of 2"), which is the bug the user reported.
+    val totalSteps = onboardingStatuses.size
+    val currentStep = currentIdx + 1
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
             modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 28.dp),
         ) {
-            StepDots(total = totalUngranted, current = stepInUngranted)
+            StepDots(total = totalSteps, current = currentStep)
             Spacer(Modifier.height(10.dp))
             Text(
-                "Step $stepInUngranted of $totalUngranted",
+                "Step $currentStep of $totalSteps",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
