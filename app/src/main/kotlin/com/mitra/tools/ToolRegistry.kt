@@ -16,6 +16,7 @@ object ToolRegistry {
             OpenUrl(context),
             OpenApp(context),
             OpenSettings(context),
+            QueryContacts(context),
             SetMediaVolume(context),
             SetBrightness(context),
             SetDnd(context),

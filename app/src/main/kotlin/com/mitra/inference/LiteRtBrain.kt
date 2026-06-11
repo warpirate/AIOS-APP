@@ -77,6 +77,13 @@ class LiteRtBrain(
         ): Map<String, Any> = mapOf("ok" to true)
 
         @Tool(
+            description = "Use this ONLY when the user wants to find a person's phone number, ask whose number something is, or look up a contact by name (e.g. 'what's mom's number', 'find priya', 'raj's phone'). Do NOT use this for opening the Contacts app, dialling, sending a message, or general chat — it only reads the address book.",
+        )
+        fun query_contacts(
+            @ToolParam(description = "the contact's name or partial name to search for") name: String,
+        ): Map<String, Any> = mapOf("ok" to true)
+
+        @Tool(
             description = "Use this when the user wants to adjust, see, or open a system settings page — Bluetooth, Wi-Fi, Do Not Disturb, airplane mode, mobile data, brightness, sound, display, location, battery, apps, storage. Mitra cannot toggle these directly; this opens the Android page where the user does it.",
         )
         fun open_settings(
