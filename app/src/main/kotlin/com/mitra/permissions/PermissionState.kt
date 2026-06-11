@@ -26,6 +26,7 @@ enum class Permission(
     WRITE_SETTINGS("write_settings"),
     NOTIFICATION_POLICY("notification_policy"),
     BLUETOOTH_CONNECT("bluetooth_connect"),
+    READ_CONTACTS("read_contacts"),
 }
 
 data class PermissionStatus(
@@ -48,8 +49,12 @@ object Permissions {
                     PermissionStatus(Permission.WRITE_SETTINGS, isWriteSettingsGranted(context)),
                     PermissionStatus(Permission.NOTIFICATION_POLICY, isNotificationPolicyGranted(context)),
                     PermissionStatus(Permission.BLUETOOTH_CONNECT, isBluetoothConnectGranted(context)),
+                    PermissionStatus(Permission.READ_CONTACTS, isReadContactsGranted(context)),
                 ),
         )
+
+    /** Public accessor used by tools (e.g. QueryContacts) to gate execution on the runtime grant. */
+    fun hasReadContacts(context: Context): Boolean = isReadContactsGranted(context)
 
     fun launchGrant(context: Context, permission: Permission) {
         when (permission) {
@@ -65,6 +70,7 @@ object Permissions {
                     Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS),
                 )
             Permission.BLUETOOTH_CONNECT -> Unit // requested via ActivityResult in the Composable
+            Permission.READ_CONTACTS -> Unit // requested via ActivityResult in the Composable
         }
     }
 
@@ -72,6 +78,7 @@ object Permissions {
     fun runtimePermission(permission: Permission): String? =
         when (permission) {
             Permission.BLUETOOTH_CONNECT -> Manifest.permission.BLUETOOTH_CONNECT
+            Permission.READ_CONTACTS -> Manifest.permission.READ_CONTACTS
             else -> null
         }
 
@@ -93,4 +100,8 @@ object Permissions {
         return context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
             PackageManager.PERMISSION_GRANTED
     }
+
+    private fun isReadContactsGranted(context: Context): Boolean =
+        context.checkSelfPermission(Manifest.permission.READ_CONTACTS) ==
+            PackageManager.PERMISSION_GRANTED
 }
