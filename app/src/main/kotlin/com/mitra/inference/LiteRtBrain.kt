@@ -20,7 +20,10 @@ import kotlinx.coroutines.flow.flowOn
 import org.json.JSONObject
 
 /** One turn of the brain: the (growing) reply text, plus optionally one device action the model called. */
-data class BrainTurn(val text: String, val toolCall: ToolCall? = null)
+data class BrainTurn(
+    val text: String,
+    val toolCall: ToolCall? = null,
+)
 
 /**
  * Gemma 4 E2B as the autonomous brain — it BOTH chats and emits tool calls. The model decides and acts.
@@ -30,11 +33,14 @@ data class BrainTurn(val text: String, val toolCall: ToolCall? = null)
  * reliable native tool-calling (Qwen3-0.6B did not). automaticToolCalling = false so Mitra owns
  * dispatch via AgentLoop + the confirmation cards. CPU backend (no NPU; Mali corrupts args).
  */
-class LiteRtBrain(modelPath: String, cacheDir: String) {
-
-    private val engine = Engine(
-        EngineConfig(modelPath = modelPath, backend = Backend.CPU(), cacheDir = cacheDir),
-    ).apply { initialize() }
+class LiteRtBrain(
+    modelPath: String,
+    cacheDir: String,
+) {
+    private val engine =
+        Engine(
+            EngineConfig(modelPath = modelPath, backend = Backend.CPU(), cacheDir = cacheDir),
+        ).apply { initialize() }
 
     /** Tools the model may call. Descriptions are "WHEN to use", boundaries kept distinct. */
     class PhoneTools : ToolSet {
@@ -54,19 +60,29 @@ class LiteRtBrain(modelPath: String, cacheDir: String) {
             @ToolParam(description = "total duration in seconds") seconds: Int,
         ): Map<String, Any> = mapOf("ok" to true)
 
-        @Tool(description = "Use this ONLY when the user explicitly says open / visit / go to a specific website, names a domain like youtube.com or github, or pastes a URL. Do NOT use this for learning, teaching, explaining, defining, summarising, translating, or any general-knowledge or content question — those are answered directly in chat, not by opening a search link.")
+        @Tool(
+            description = "Use this ONLY when the user explicitly says open / visit / go to a specific website, names a domain like youtube.com or github, or pastes a URL. Do NOT use this for learning, teaching, explaining, defining, summarising, translating, or any general-knowledge or content question — those are answered directly in chat, not by opening a search link.",
+        )
         fun open_url(
             @ToolParam(description = "the exact web address — only when the user named a site or pasted a URL") url: String,
         ): Map<String, Any> = mapOf("ok" to true)
 
-        @Tool(description = "Use this ONLY when the user explicitly says open / launch / start a named app like Spotify, Camera, WhatsApp. Do NOT use this for hardware toggles, system settings, Bluetooth, Wi-Fi, brightness, alarms, or single-word nouns — those have their own tools or none at all.")
+        @Tool(
+            description = "Use this ONLY when the user explicitly says open / launch / start a named app like Spotify, Camera, WhatsApp. Do NOT use this for hardware toggles, system settings, Bluetooth, Wi-Fi, brightness, alarms, or single-word nouns — those have their own tools or none at all.",
+        )
         fun open_app(
-            @ToolParam(description = "the visible app name (e.g. Spotify) or its package id, only when an explicit open/launch verb was used") name: String,
+            @ToolParam(
+                description = "the visible app name (e.g. Spotify) or its package id, only when an explicit open/launch verb was used",
+            ) name: String,
         ): Map<String, Any> = mapOf("ok" to true)
 
-        @Tool(description = "Use this when the user wants to adjust, see, or open a system settings page — Bluetooth, Wi-Fi, Do Not Disturb, airplane mode, mobile data, brightness, sound, display, location, battery, apps, storage. Mitra cannot toggle these directly; this opens the Android page where the user does it.")
+        @Tool(
+            description = "Use this when the user wants to adjust, see, or open a system settings page — Bluetooth, Wi-Fi, Do Not Disturb, airplane mode, mobile data, brightness, sound, display, location, battery, apps, storage. Mitra cannot toggle these directly; this opens the Android page where the user does it.",
+        )
         fun open_settings(
-            @ToolParam(description = "the panel: bluetooth, wifi, dnd, airplane, mobile_data, brightness, sound, display, location, battery, apps, storage") panel: String,
+            @ToolParam(
+                description = "the panel: bluetooth, wifi, dnd, airplane, mobile_data, brightness, sound, display, location, battery, apps, storage",
+            ) panel: String,
         ): Map<String, Any> = mapOf("ok" to true)
 
         @Tool(description = "Use this when the user wants to change, raise, lower, mute, or set the media or music volume.")
@@ -106,35 +122,37 @@ class LiteRtBrain(modelPath: String, cacheDir: String) {
         // Real execution is dispatched by AgentLoop -> ToolRegistry, not here.
     }
 
-    private val conversation = engine.createConversation(
-        ConversationConfig(
-            systemInstruction = Contents.of(
-                """
-You are Mitra, an on-device phone assistant. Answer like a smart friend who texts.
+    private val conversation =
+        engine.createConversation(
+            ConversationConfig(
+                systemInstruction =
+                    Contents.of(
+                        """
+                        You are Mitra, an on-device phone assistant. Answer like a smart friend who texts.
 
-LENGTH:
-- Tool confirmation: 1 sentence.
-- Teach / explain / define / translate / list: give a useful multi-sentence answer with examples or a short list. Never truncate to one line. Never punt with "what would you like to know?".
-- Small talk: 1-2 sentences.
+                        LENGTH:
+                        - Tool confirmation: 1 sentence.
+                        - Teach / explain / define / translate / list: give a useful multi-sentence answer with examples or a short list. Never truncate to one line. Never punt with "what would you like to know?".
+                        - Small talk: 1-2 sentences.
 
-VOICE — answer the question directly, never talk about yourself.
-- WRONG: "I can", "Mitra can", "I am here to help", "Let me", "What would you like to know?".
-- RIGHT: state the answer in second person.
-- No greetings, no apologies, no exclamation marks, no em dashes, no emoji.
-- No filler ("just", "really", "basically", "perhaps", "in order to").
-- No "In conclusion", "Moreover", "Furthermore".
-- No buzzwords (leverage, utilize, robust, seamless, comprehensive, delve, holistic, actionable, impactful, foster, harness, embark, vibrant, thriving).
-- Use "is" / "has", not "serves as" / "features" / "boasts".
-- Fragments and bullet lists are fine.
+                        VOICE — answer the question directly, never talk about yourself.
+                        - WRONG: "I can", "Mitra can", "I am here to help", "Let me", "What would you like to know?".
+                        - RIGHT: state the answer in second person.
+                        - No greetings, no apologies, no exclamation marks, no em dashes, no emoji.
+                        - No filler ("just", "really", "basically", "perhaps", "in order to").
+                        - No "In conclusion", "Moreover", "Furthermore".
+                        - No buzzwords (leverage, utilize, robust, seamless, comprehensive, delve, holistic, actionable, impactful, foster, harness, embark, vibrant, thriving).
+                        - Use "is" / "has", not "serves as" / "features" / "boasts".
+                        - Fragments and bullet lists are fine.
 
-TOOLS — call a tool only when the user's request matches its "Use this WHEN" boundary. Never call open_url for learn / teach / explain / define / translate questions; answer them with content.
-                """.trimIndent(),
+                        TOOLS — call a tool only when the user's request matches its "Use this WHEN" boundary. Never call open_url for learn / teach / explain / define / translate questions; answer them with content.
+                        """.trimIndent(),
+                    ),
+                samplerConfig = SamplerConfig(temperature = 0.3, topK = 20, topP = 0.95),
+                tools = listOf(tool(PhoneTools())),
+                automaticToolCalling = false,
             ),
-            samplerConfig = SamplerConfig(temperature = 0.3, topK = 20, topP = 0.95),
-            tools = listOf(tool(PhoneTools())),
-            automaticToolCalling = false,
-        ),
-    )
+        )
 
     /**
      * Silent background warmup. Runs a tiny throwaway inference to warm the engine: pages the model
@@ -144,12 +162,13 @@ TOOLS — call a tool only when the user's request matches its "Use this WHEN" b
      * history. Call once from a background coroutine right after the brain loads.
      */
     suspend fun warmup() {
-        val warm = engine.createConversation(
-            ConversationConfig(
-                systemInstruction = Contents.of(""),
-                samplerConfig = SamplerConfig(temperature = 0.1, topK = 1, topP = 1.0),
-            ),
-        )
+        val warm =
+            engine.createConversation(
+                ConversationConfig(
+                    systemInstruction = Contents.of(""),
+                    samplerConfig = SamplerConfig(temperature = 0.1, topK = 1, topP = 1.0),
+                ),
+            )
         try {
             // Pull one or two tokens then stop; that's enough to compile kernels + warm CPU.
             var tokens = 0
@@ -165,21 +184,24 @@ TOOLS — call a tool only when the user's request matches its "Use this WHEN" b
     }
 
     /** Streams the reply; the tool call (if any) is attached as soon as the runtime surfaces it. */
-    fun chatStream(userText: String): Flow<BrainTurn> = flow {
-        var acc = ""
-        var call: ToolCall? = null
-        // No /no_think here — that's a Qwen-only switch. Gemma's reasoning is curbed via the system
-        // prompt ("do not explain your reasoning") and any stray <think> is stripped by sanitize().
-        conversation.sendMessageAsync(userText).collect { msg ->
-            val piece = textOf(msg)
-            acc = if (piece.isNotEmpty() && piece.startsWith(acc)) piece else acc + piece
-            msg.toolCalls.firstOrNull()?.let { call = ToolCall(it.name, argsToMap(it.arguments)) }
-            emit(BrainTurn(sanitize(acc), call))
-        }
-    }.flowOn(Dispatchers.IO)
+    fun chatStream(userText: String): Flow<BrainTurn> =
+        flow {
+            var acc = ""
+            var call: ToolCall? = null
+            // No /no_think here — that's a Qwen-only switch. Gemma's reasoning is curbed via the system
+            // prompt ("do not explain your reasoning") and any stray <think> is stripped by sanitize().
+            conversation.sendMessageAsync(userText).collect { msg ->
+                val piece = textOf(msg)
+                acc = if (piece.isNotEmpty() && piece.startsWith(acc)) piece else acc + piece
+                msg.toolCalls.firstOrNull()?.let { call = ToolCall(it.name, argsToMap(it.arguments)) }
+                emit(BrainTurn(sanitize(acc), call))
+            }
+        }.flowOn(Dispatchers.IO)
 
     private fun textOf(message: Message): String =
-        message.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
+        message.contents.contents
+            .filterIsInstance<Content.Text>()
+            .joinToString("") { it.text }
 
     private fun sanitize(s: String): String {
         var t = s.replace(Regex("(?s)<think>.*?</think>"), "")
@@ -192,20 +214,21 @@ TOOLS — call a tool only when the user's request matches its "Use this WHEN" b
         return t.replace(Regex("<\\|[^|]*\\|>"), "").replace("</think>", "").trim()
     }
 
-    private fun argsToMap(raw: Any?): Map<String, Any?> = when (raw) {
-        is Map<*, *> -> raw.entries.associate { (k, v) -> k.toString() to v }
-        is String -> {
-            val start = raw.indexOf('{')
-            val end = raw.lastIndexOf('}')
-            if (start < 0 || end <= start) {
-                emptyMap()
-            } else {
-                val obj = JSONObject(raw.substring(start, end + 1))
-                obj.keys().asSequence().associateWith { obj.get(it) }
+    private fun argsToMap(raw: Any?): Map<String, Any?> =
+        when (raw) {
+            is Map<*, *> -> raw.entries.associate { (k, v) -> k.toString() to v }
+            is String -> {
+                val start = raw.indexOf('{')
+                val end = raw.lastIndexOf('}')
+                if (start < 0 || end <= start) {
+                    emptyMap()
+                } else {
+                    val obj = JSONObject(raw.substring(start, end + 1))
+                    obj.keys().asSequence().associateWith { obj.get(it) }
+                }
             }
+            else -> emptyMap()
         }
-        else -> emptyMap()
-    }
 
     fun close() {
         conversation.close()

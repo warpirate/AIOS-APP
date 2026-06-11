@@ -6,8 +6,13 @@ import com.mitra.automation.AutomationTier
 enum class SideEffect { None, Reversible, Irreversible }
 
 sealed interface ToolResult {
-    data class Success(val message: String) : ToolResult
-    data class Failure(val message: String) : ToolResult
+    data class Success(
+        val message: String,
+    ) : ToolResult
+
+    data class Failure(
+        val message: String,
+    ) : ToolResult
 }
 
 /** One device action. One tool per file. */
@@ -23,16 +28,18 @@ interface Tool {
 }
 
 // The model emits args as JSON; values may arrive as Number, String, or Boolean. Coerce defensively.
-fun argInt(value: Any?): Int? = when (value) {
-    is Number -> value.toInt()
-    is String -> value.trim().toDoubleOrNull()?.toInt()
-    else -> null
-}
+fun argInt(value: Any?): Int? =
+    when (value) {
+        is Number -> value.toInt()
+        is String -> value.trim().toDoubleOrNull()?.toInt()
+        else -> null
+    }
 
 fun argString(value: Any?): String? = (value as? String)?.trim()?.ifBlank { null }
 
-fun argBool(value: Any?): Boolean? = when (value) {
-    is Boolean -> value
-    is String -> value.trim().lowercase().toBooleanStrictOrNull()
-    else -> null
-}
+fun argBool(value: Any?): Boolean? =
+    when (value) {
+        is Boolean -> value
+        is String -> value.trim().lowercase().toBooleanStrictOrNull()
+        else -> null
+    }

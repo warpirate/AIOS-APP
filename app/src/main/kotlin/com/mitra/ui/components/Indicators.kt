@@ -43,23 +43,28 @@ fun MitraDotPulse(
     modifier: Modifier = Modifier,
 ) {
     val transition = rememberInfiniteTransition(label = "dotpulse")
-    val alphas = (0..2).map { i ->
-        transition.animateFloat(
-            initialValue = 0.3f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 900, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse,
-                initialStartOffset = androidx.compose.animation.core.StartOffset(i * 200),
-            ),
-            label = "dotpulse.$i",
-        ).value
-    }
+    val alphas =
+        (0..2).map { i ->
+            transition
+                .animateFloat(
+                    initialValue = 0.3f,
+                    targetValue = 1f,
+                    animationSpec =
+                        infiniteRepeatable(
+                            animation = tween(durationMillis = 900, easing = LinearEasing),
+                            repeatMode = RepeatMode.Reverse,
+                            initialStartOffset = androidx.compose.animation.core
+                                .StartOffset(i * 200),
+                        ),
+                    label = "dotpulse.$i",
+                ).value
+        }
     Row(
-        modifier = modifier.semantics {
-            liveRegion = LiveRegionMode.Polite
-            contentDescription = label
-        },
+        modifier =
+            modifier.semantics {
+                liveRegion = LiveRegionMode.Polite
+                contentDescription = label
+            },
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -86,10 +91,11 @@ fun MitraSpinner(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier.semantics {
-            liveRegion = LiveRegionMode.Polite
-            contentDescription = label
-        },
+        modifier =
+            modifier.semantics {
+                liveRegion = LiveRegionMode.Polite
+                contentDescription = label
+            },
         contentAlignment = Alignment.Center,
     ) {
         CircularProgressIndicator(

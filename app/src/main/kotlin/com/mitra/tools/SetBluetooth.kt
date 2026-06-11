@@ -27,7 +27,9 @@ import android.provider.Settings
  * This honest tiered fallback is the only correct shape; pretending API 33+ has a real toggle
  * (e.g. by using AccessibilityService tile-tap) belongs in a separate, future feature.
  */
-class SetBluetooth(private val context: Context) : Tool {
+class SetBluetooth(
+    private val context: Context,
+) : Tool {
     override val name = "set_bluetooth"
     override val sideEffect = SideEffect.Reversible
 
@@ -46,8 +48,9 @@ class SetBluetooth(private val context: Context) : Tool {
         // API 33+: enable/disable are restricted. Bounce to the Bluetooth settings page so the
         // user toggles manually — same calibration we use for Wi-Fi / Mobile data / Airplane.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val intent =
+                Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             runCatching { context.startActivity(intent) }
             return ToolResult.Failure(
                 "On Android 13+ third-party apps can't flip Bluetooth directly. Opened the Bluetooth page so you can tap it.",
@@ -57,8 +60,11 @@ class SetBluetooth(private val context: Context) : Tool {
         return try {
             @Suppress("DEPRECATION", "MissingPermission")
             val ok = if (on) adapter.enable() else adapter.disable()
-            if (ok) ToolResult.Success(if (on) "Bluetooth on" else "Bluetooth off")
-            else ToolResult.Failure("Couldn't toggle Bluetooth — system refused")
+            if (ok) {
+                ToolResult.Success(if (on) "Bluetooth on" else "Bluetooth off")
+            } else {
+                ToolResult.Failure("Couldn't toggle Bluetooth — system refused")
+            }
         } catch (_: SecurityException) {
             ToolResult.Failure("Bluetooth permission missing — grant it and ask again")
         } catch (_: Exception) {
@@ -71,15 +77,14 @@ class SetBluetooth(private val context: Context) : Tool {
         return bm?.adapter
     }
 
-    private fun hasBluetoothConnect(): Boolean {
-        return context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
-            PackageManager.PERMISSION_GRANTED
-    }
+    private fun hasBluetoothConnect(): Boolean = context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+        PackageManager.PERMISSION_GRANTED
 
     private fun bounceToAppPermissions() {
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-            .setData(Uri.parse("package:${context.packageName}"))
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val intent =
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(Uri.parse("package:${context.packageName}"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { context.startActivity(intent) }
     }
 }

@@ -1,5 +1,6 @@
 package com.mitra.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -20,7 +21,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.clickable
 
 /**
  * The app bar from `mitra.css §App bar` + the icon button from `§iconbtn`.
@@ -39,11 +39,15 @@ fun MitraTopAppBar(
     actions: @Composable () -> Unit = {},
 ) {
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = 56.dp)
-            .padding(start = 16.dp, end = 4.dp)
-            .semantics { role = Role.Image; contentDescription = title },
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = 56.dp)
+                .padding(start = 16.dp, end = 4.dp)
+                .semantics {
+                    role = Role.Image
+                    contentDescription = title
+                },
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -74,10 +78,11 @@ fun MitraIconButton(
     content: @Composable () -> Unit,
 ) {
     Surface(
-        modifier = modifier
-            .size(48.dp)
-            .clickable(enabled = enabled, onClick = onClick, role = Role.Button)
-            .semantics { contentDescription = label },
+        modifier =
+            modifier
+                .size(48.dp)
+                .clickable(enabled = enabled, onClick = onClick, role = Role.Button)
+                .semantics { contentDescription = label },
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0f),
         shape = CircleShape,
     ) {

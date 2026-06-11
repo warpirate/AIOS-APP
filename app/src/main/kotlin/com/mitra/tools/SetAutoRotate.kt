@@ -13,7 +13,9 @@ import android.provider.Settings
  * Uses the same `WRITE_SETTINGS` grant that [SetBrightness] needs — declared in manifest, but
  * the user must explicitly grant via the system page on first use.
  */
-class SetAutoRotate(private val context: Context) : Tool {
+class SetAutoRotate(
+    private val context: Context,
+) : Tool {
     override val name = "set_auto_rotate"
     override val sideEffect = SideEffect.Reversible
 
@@ -21,9 +23,10 @@ class SetAutoRotate(private val context: Context) : Tool {
         val on = argBool(args["on"]) ?: return ToolResult.Failure("I need to know on or off")
 
         if (!Settings.System.canWrite(context)) {
-            val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS)
-                .setData(Uri.parse("package:${context.packageName}"))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val intent =
+                Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS)
+                    .setData(Uri.parse("package:${context.packageName}"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             runCatching { context.startActivity(intent) }
             return ToolResult.Failure(
                 "Grant Mitra system-settings control on the page I just opened, then ask again",

@@ -26,31 +26,28 @@ private fun face(size: Int, line: Int, weight: FontWeight, tracking: Double = 0.
         letterSpacing = tracking.sp,
     )
 
-val MitraTypography: Typography = Typography(
-    // Display — onboarding hero, big numbers in audit summary
-    displayLarge = face(32, 40, FontWeight.SemiBold, -0.5),
-    displayMedium = face(32, 40, FontWeight.SemiBold, -0.5),
-    displaySmall = face(32, 40, FontWeight.SemiBold, -0.5),
-
-    // HeadlineL — screen titles ("Settings", "Audit history")
-    headlineLarge = face(24, 32, FontWeight.SemiBold, -0.25),
-    // HeadlineM — section headers within screens
-    headlineMedium = face(20, 28, FontWeight.SemiBold),
-    headlineSmall = face(20, 28, FontWeight.SemiBold),
-
-    // TitleL — action-card titles, list-item primary text
-    titleLarge = face(18, 24, FontWeight.Medium),
-    titleMedium = face(18, 24, FontWeight.Medium),
-    titleSmall = face(16, 24, FontWeight.Medium),
-
-    // Body — chat messages, paragraph text, primary readable copy
-    bodyLarge = face(16, 24, FontWeight.Normal),
-    bodyMedium = face(14, 20, FontWeight.Normal),
-    bodySmall = face(13, 18, FontWeight.Normal),
-
-    // Label — button labels, tab labels, card metadata
-    labelLarge = face(14, 20, FontWeight.Medium, 0.1),
-    labelMedium = face(13, 16, FontWeight.Medium, 0.1),
-    // Caption — timestamps, footnotes, audit row secondary text
-    labelSmall = face(12, 16, FontWeight.Normal, 0.2),
-)
+val MitraTypography: Typography =
+    Typography(
+        // Display — onboarding hero, big numbers in audit summary
+        displayLarge = face(32, 40, FontWeight.SemiBold, -0.5),
+        displayMedium = face(32, 40, FontWeight.SemiBold, -0.5),
+        displaySmall = face(32, 40, FontWeight.SemiBold, -0.5),
+        // HeadlineL — screen titles ("Settings", "Audit history")
+        headlineLarge = face(24, 32, FontWeight.SemiBold, -0.25),
+        // HeadlineM — section headers within screens
+        headlineMedium = face(20, 28, FontWeight.SemiBold),
+        headlineSmall = face(20, 28, FontWeight.SemiBold),
+        // TitleL — action-card titles, list-item primary text
+        titleLarge = face(18, 24, FontWeight.Medium),
+        titleMedium = face(18, 24, FontWeight.Medium),
+        titleSmall = face(16, 24, FontWeight.Medium),
+        // Body — chat messages, paragraph text, primary readable copy
+        bodyLarge = face(16, 24, FontWeight.Normal),
+        bodyMedium = face(14, 20, FontWeight.Normal),
+        bodySmall = face(13, 18, FontWeight.Normal),
+        // Label — button labels, tab labels, card metadata
+        labelLarge = face(14, 20, FontWeight.Medium, 0.1),
+        labelMedium = face(13, 16, FontWeight.Medium, 0.1),
+        // Caption — timestamps, footnotes, audit row secondary text
+        labelSmall = face(12, 16, FontWeight.Normal, 0.2),
+    )

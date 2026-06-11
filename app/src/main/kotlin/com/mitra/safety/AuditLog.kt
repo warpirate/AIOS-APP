@@ -10,8 +10,9 @@ import com.mitra.tools.SideEffect
  *
  * In-memory ring buffer for V1 — persisted log lands when M5 settings UI does.
  */
-class AuditLog(private val capacity: Int = 200) {
-
+class AuditLog(
+    private val capacity: Int = 200,
+) {
     data class Entry(
         val toolName: String,
         val sideEffect: SideEffect?,

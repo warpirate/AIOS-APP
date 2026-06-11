@@ -51,10 +51,11 @@ fun MitraPrimaryButton(
         modifier = modifier.defaultMinSize(minHeight = 52.dp),
         shape = ButtonShape,
         contentPadding = ButtonPadding,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-        ),
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
     ) { ButtonContent(label, icon) }
 }
 
@@ -72,10 +73,11 @@ fun MitraTonalButton(
         modifier = modifier.defaultMinSize(minHeight = 52.dp),
         shape = ButtonShape,
         contentPadding = ButtonPadding,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ),
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ),
     ) { ButtonContent(label, icon) }
 }
 
@@ -94,9 +96,10 @@ fun MitraOutlineButton(
         shape = ButtonShape,
         contentPadding = ButtonPadding,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        colors = ButtonDefaults.outlinedButtonColors(
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ),
+        colors =
+            ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ),
     ) { ButtonContent(label, icon) }
 }
 
@@ -114,9 +117,10 @@ fun MitraTextButton(
         modifier = modifier.defaultMinSize(minHeight = 48.dp),
         shape = ButtonShape,
         contentPadding = ButtonPadding,
-        colors = ButtonDefaults.textButtonColors(
-            contentColor = MaterialTheme.colorScheme.primary,
-        ),
+        colors =
+            ButtonDefaults.textButtonColors(
+                contentColor = MaterialTheme.colorScheme.primary,
+            ),
     ) { ButtonContent(label, icon) }
 }
 
@@ -139,10 +143,11 @@ fun MitraDangerButton(
         modifier = modifier.defaultMinSize(minHeight = 52.dp),
         shape = ButtonShape,
         contentPadding = ButtonPadding,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.error,
-            contentColor = MaterialTheme.colorScheme.onError,
-        ),
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError,
+            ),
     ) { ButtonContent(label, icon) }
 }
 

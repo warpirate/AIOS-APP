@@ -17,65 +17,70 @@ import androidx.compose.runtime.CompositionLocalProvider
  * Do not introduce a `dynamicColor` path. Mitra is clay; system-derived accents drift the brand.
  * See docs/design/tokens.md section 9 ("What not to add").
  */
-private val MitraShapes = Shapes(
-    extraSmall = MitraTokens.radiusSm,
-    small = MitraTokens.radiusMd,
-    medium = MitraTokens.radiusMd,
-    large = MitraTokens.radiusLg,
-    extraLarge = MitraTokens.radiusXl,
-)
+private val MitraShapes =
+    Shapes(
+        extraSmall = MitraTokens.radiusSm,
+        small = MitraTokens.radiusMd,
+        medium = MitraTokens.radiusMd,
+        large = MitraTokens.radiusLg,
+        extraLarge = MitraTokens.radiusXl,
+    )
 
-private val LightColors = lightColorScheme(
-    primary = MitraTokens.Light.primary,
-    onPrimary = MitraTokens.Light.onPrimary,
-    primaryContainer = MitraTokens.Light.primaryContainer,
-    onPrimaryContainer = MitraTokens.Light.onPrimaryContainer,
-    secondary = MitraTokens.Light.primary,
-    onSecondary = MitraTokens.Light.onPrimary,
-    tertiary = MitraTokens.Light.info,
-    onTertiary = MitraTokens.Light.onPrimary,
-    background = MitraTokens.Light.bg,
-    onBackground = MitraTokens.Light.onSurface,
-    surface = MitraTokens.Light.surface,
-    onSurface = MitraTokens.Light.onSurface,
-    surfaceVariant = MitraTokens.Light.surfaceVariant,
-    onSurfaceVariant = MitraTokens.Light.onSurfaceVariant,
-    outline = MitraTokens.Light.outline,
-    error = MitraTokens.Light.danger,
-    onError = MitraTokens.Light.onPrimary,
-)
+private val LightColors =
+    lightColorScheme(
+        primary = MitraTokens.Light.primary,
+        onPrimary = MitraTokens.Light.onPrimary,
+        primaryContainer = MitraTokens.Light.primaryContainer,
+        onPrimaryContainer = MitraTokens.Light.onPrimaryContainer,
+        secondary = MitraTokens.Light.primary,
+        onSecondary = MitraTokens.Light.onPrimary,
+        tertiary = MitraTokens.Light.info,
+        onTertiary = MitraTokens.Light.onPrimary,
+        background = MitraTokens.Light.bg,
+        onBackground = MitraTokens.Light.onSurface,
+        surface = MitraTokens.Light.surface,
+        onSurface = MitraTokens.Light.onSurface,
+        surfaceVariant = MitraTokens.Light.surfaceVariant,
+        onSurfaceVariant = MitraTokens.Light.onSurfaceVariant,
+        outline = MitraTokens.Light.outline,
+        error = MitraTokens.Light.danger,
+        onError = MitraTokens.Light.onPrimary,
+    )
 
-private val DarkColors = darkColorScheme(
-    primary = MitraTokens.Dark.primary,
-    onPrimary = MitraTokens.Dark.onPrimary,
-    primaryContainer = MitraTokens.Dark.primaryContainer,
-    onPrimaryContainer = MitraTokens.Dark.onPrimaryContainer,
-    secondary = MitraTokens.Dark.primary,
-    onSecondary = MitraTokens.Dark.onPrimary,
-    tertiary = MitraTokens.Dark.info,
-    onTertiary = MitraTokens.Dark.bg,
-    background = MitraTokens.Dark.bg,
-    onBackground = MitraTokens.Dark.onSurface,
-    surface = MitraTokens.Dark.surface,
-    onSurface = MitraTokens.Dark.onSurface,
-    surfaceVariant = MitraTokens.Dark.surfaceVariant,
-    onSurfaceVariant = MitraTokens.Dark.onSurfaceVariant,
-    outline = MitraTokens.Dark.outline,
-    error = MitraTokens.Dark.danger,
-    onError = MitraTokens.Dark.bg,
-)
+private val DarkColors =
+    darkColorScheme(
+        primary = MitraTokens.Dark.primary,
+        onPrimary = MitraTokens.Dark.onPrimary,
+        primaryContainer = MitraTokens.Dark.primaryContainer,
+        onPrimaryContainer = MitraTokens.Dark.onPrimaryContainer,
+        secondary = MitraTokens.Dark.primary,
+        onSecondary = MitraTokens.Dark.onPrimary,
+        tertiary = MitraTokens.Dark.info,
+        onTertiary = MitraTokens.Dark.bg,
+        background = MitraTokens.Dark.bg,
+        onBackground = MitraTokens.Dark.onSurface,
+        surface = MitraTokens.Dark.surface,
+        onSurface = MitraTokens.Dark.onSurface,
+        surfaceVariant = MitraTokens.Dark.surfaceVariant,
+        onSurfaceVariant = MitraTokens.Dark.onSurfaceVariant,
+        outline = MitraTokens.Dark.outline,
+        error = MitraTokens.Dark.danger,
+        onError = MitraTokens.Dark.bg,
+    )
 
-private val LightSemantics = MitraSemanticColors(
-    success = MitraTokens.Light.success,
-    warning = MitraTokens.Light.warning,
-    info = MitraTokens.Light.info,
-)
+private val LightSemantics =
+    MitraSemanticColors(
+        success = MitraTokens.Light.success,
+        warning = MitraTokens.Light.warning,
+        info = MitraTokens.Light.info,
+    )
 
-private val DarkSemantics = MitraSemanticColors(
-    success = MitraTokens.Dark.success,
-    warning = MitraTokens.Dark.warning,
-    info = MitraTokens.Dark.info,
-)
+private val DarkSemantics =
+    MitraSemanticColors(
+        success = MitraTokens.Dark.success,
+        warning = MitraTokens.Dark.warning,
+        info = MitraTokens.Dark.info,
+    )
 
 @Composable
 fun MitraTheme(

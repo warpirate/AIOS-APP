@@ -1,7 +1,10 @@
 package com.mitra.agent
 
 /** A structured action, e.g. toggle_flashlight with {"on": true}. */
-data class ToolCall(val name: String, val args: Map<String, Any?> = emptyMap())
+data class ToolCall(
+    val name: String,
+    val args: Map<String, Any?> = emptyMap(),
+)
 
 /** Turns a natural-language request into a structured [ToolCall], or null if none matches. */
 interface Router {
@@ -68,9 +71,10 @@ class IntentParser : Router {
             return when {
                 "max" in t || "full" in t || "brightest" in t -> ToolCall("set_brightness", mapOf("level" to 100))
                 "min" in t || "dim" in t || "lowest" in t || "darkest" in t -> ToolCall("set_brightness", mapOf("level" to 10))
-                else -> Regex("""(\d{1,3})\s*%?""").find(t)?.let {
-                    ToolCall("set_brightness", mapOf("level" to it.groupValues[1].toInt().coerceIn(0, 100)))
-                }
+                else ->
+                    Regex("""(\d{1,3})\s*%?""").find(t)?.let {
+                        ToolCall("set_brightness", mapOf("level" to it.groupValues[1].toInt().coerceIn(0, 100)))
+                    }
             }
         }
 
@@ -79,9 +83,10 @@ class IntentParser : Router {
             return when {
                 "mute" in t || "silent" in t -> ToolCall("set_media_volume", mapOf("level" to 0))
                 "max" in t || "full" in t || "loudest" in t -> ToolCall("set_media_volume", mapOf("level" to 100))
-                else -> Regex("""(\d{1,3})\s*%?""").find(t)?.let {
-                    ToolCall("set_media_volume", mapOf("level" to it.groupValues[1].toInt().coerceIn(0, 100)))
-                }
+                else ->
+                    Regex("""(\d{1,3})\s*%?""").find(t)?.let {
+                        ToolCall("set_media_volume", mapOf("level" to it.groupValues[1].toInt().coerceIn(0, 100)))
+                    }
             }
         }
 
@@ -105,8 +110,9 @@ class IntentParser : Router {
     private fun explicitToggle(t: String, keywords: List<String>): Boolean? {
         if (keywords.none { it in t }) return null
         val off = listOf("off", "disable", "stop", "kill", "turn off", "switch off", "lock").any { it in t }
-        val on = listOf("turn on", "switch on", "enable", "start", "connect", "unlock").any { it in t } ||
-            (" on" in t || t.endsWith(" on") || t.startsWith("on "))
+        val on =
+            listOf("turn on", "switch on", "enable", "start", "connect", "unlock").any { it in t } ||
+                (" on" in t || t.endsWith(" on") || t.startsWith("on "))
         return when {
             off -> false
             on -> true
@@ -155,31 +161,32 @@ class IntentParser : Router {
         // "volume" deliberately allowed to flow through — set_media_volume runs first only when the
         // request is concrete (a number / mute / max). The plain word "volume?" falls to sound panel.
 
-        val keywords = listOf(
-            "bluetooth" to "bluetooth",
-            "wi-fi" to "wifi",
-            "wi fi" to "wifi",
-            "wifi" to "wifi",
-            "do not disturb" to "dnd",
-            "dnd" to "dnd",
-            "silent mode" to "dnd",
-            "zen mode" to "dnd",
-            "airplane" to "airplane",
-            "flight mode" to "airplane",
-            "aeroplane" to "airplane",
-            "mobile data" to "mobile_data",
-            "cellular" to "mobile_data",
-            "data roaming" to "mobile_data",
-            "hotspot" to "hotspot",
-            "tethering" to "hotspot",
-            "nfc" to "nfc",
-            "location" to "location",
-            "gps" to "location",
-            "battery saver" to "battery",
-            "power saver" to "battery",
-            "data usage" to "data_usage",
-            "accessibility" to "accessibility",
-        )
+        val keywords =
+            listOf(
+                "bluetooth" to "bluetooth",
+                "wi-fi" to "wifi",
+                "wi fi" to "wifi",
+                "wifi" to "wifi",
+                "do not disturb" to "dnd",
+                "dnd" to "dnd",
+                "silent mode" to "dnd",
+                "zen mode" to "dnd",
+                "airplane" to "airplane",
+                "flight mode" to "airplane",
+                "aeroplane" to "airplane",
+                "mobile data" to "mobile_data",
+                "cellular" to "mobile_data",
+                "data roaming" to "mobile_data",
+                "hotspot" to "hotspot",
+                "tethering" to "hotspot",
+                "nfc" to "nfc",
+                "location" to "location",
+                "gps" to "location",
+                "battery saver" to "battery",
+                "power saver" to "battery",
+                "data usage" to "data_usage",
+                "accessibility" to "accessibility",
+            )
         return keywords.firstOrNull { (kw, _) -> kw in t }?.second
     }
 

@@ -27,17 +27,19 @@ class AgentLoop(
     }
 
     /** Run an already-decided tool call (e.g. one the LLM brain emitted), formatted for the keyword path. */
-    fun execute(call: ToolCall): String = when (val result = runCall(call)) {
-        is ToolResult.Success -> "✓ ${result.message}"
-        is ToolResult.Failure -> "✗ ${result.message}"
-    }
+    fun execute(call: ToolCall): String =
+        when (val result = runCall(call)) {
+            is ToolResult.Success -> "✓ ${result.message}"
+            is ToolResult.Failure -> "✗ ${result.message}"
+        }
 
     /** Run a tool call and return the raw result (the UI renders it as an action card). */
     fun runCall(call: ToolCall): ToolResult {
-        val tool = toolsByName[call.name]
-            ?: return ToolResult.Failure("I don't have a tool for that yet").also {
-                audit.record(call.name, sideEffect = null, ok = false)
-            }
+        val tool =
+            toolsByName[call.name]
+                ?: return ToolResult.Failure("I don't have a tool for that yet").also {
+                    audit.record(call.name, sideEffect = null, ok = false)
+                }
         val result = tool.execute(call.args)
         audit.record(call.name, tool.sideEffect, ok = result is ToolResult.Success)
         return result

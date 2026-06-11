@@ -10,7 +10,10 @@ enum class AutomationTier { ManagerApi, RemoteInput, Deeplink, A11yGesture }
 
 /** What a backend is asked to do. Phase 0 has one shape; later tiers add new sealed cases. */
 sealed interface AutomationAction {
-    data class ToolDispatch(val name: String, val args: Map<String, Any?>) : AutomationAction
+    data class ToolDispatch(
+        val name: String,
+        val args: Map<String, Any?>,
+    ) : AutomationAction
     // Future:
     // data class ReplyToNotification(val pkg: String, val text: String) : AutomationAction
     // data class OpenDeeplink(val uri: String) : AutomationAction
@@ -18,12 +21,19 @@ sealed interface AutomationAction {
 }
 
 sealed interface BackendResult {
-    data class Success(val message: String) : BackendResult
-    data class Failure(val message: String) : BackendResult
+    data class Success(
+        val message: String,
+    ) : BackendResult
+
+    data class Failure(
+        val message: String,
+    ) : BackendResult
 }
 
 interface AutomationBackend {
     val tier: AutomationTier
+
     fun supports(action: AutomationAction): Boolean
+
     suspend fun execute(action: AutomationAction): BackendResult
 }

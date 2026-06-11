@@ -32,66 +32,69 @@ class AgentRuntime(
 ) {
     @Volatile private var currentGate: Channel<GateDecision>? = null
 
-    fun run(utterance: UserUtterance): Flow<RuntimeEvent> = flow {
-        check(currentGate == null) { "AgentRuntime is single-turn-at-a-time; previous run still active" }
-        val gate = Channel<GateDecision>(capacity = Channel.RENDEZVOUS)
-        currentGate = gate
-        context.beginTurn(utterance)
-        try {
-            val ctx = context.turn() ?: error("turn missing after beginTurn")
-            val plan = try {
-                planner.plan(utterance.text, ctx)
-            } catch (t: Throwable) {
-                emit(RuntimeEvent.Failed(reason = "planner failed: ${t::class.simpleName ?: "unknown"}"))
-                return@flow
-            }
-            emit(RuntimeEvent.PlanReady(plan))
+    fun run(utterance: UserUtterance): Flow<RuntimeEvent> =
+        flow {
+            check(currentGate == null) { "AgentRuntime is single-turn-at-a-time; previous run still active" }
+            val gate = Channel<GateDecision>(capacity = Channel.RENDEZVOUS)
+            currentGate = gate
+            context.beginTurn(utterance)
+            try {
+                val ctx = context.turn() ?: error("turn missing after beginTurn")
+                val plan =
+                    try {
+                        planner.plan(utterance.text, ctx)
+                    } catch (t: Throwable) {
+                        emit(RuntimeEvent.Failed(reason = "planner failed: ${t::class.simpleName ?: "unknown"}"))
+                        return@flow
+                    }
+                emit(RuntimeEvent.PlanReady(plan))
 
-            if (plan.steps.isEmpty()) {
-                emit(RuntimeEvent.Done(summary = plan.rationale ?: "nothing to do"))
-                return@flow
-            }
+                if (plan.steps.isEmpty()) {
+                    emit(RuntimeEvent.Done(summary = plan.rationale ?: "nothing to do"))
+                    return@flow
+                }
 
-            for ((index, step) in plan.steps.withIndex()) {
-                // V1 only gates Irreversible. Reversible auto-runs (Phase 2 will add bulk pre-confirm UX).
-                if (step.sideEffect == SideEffect.Irreversible) {
-                    emit(RuntimeEvent.GateRequested(index, step))
-                    val decision = gate.receive()
-                    if (decision == GateDecision.Cancel) {
-                        audit.record(step.toolName, step.sideEffect, ok = false)
-                        emit(RuntimeEvent.Failed(reason = "cancelled by user"))
+                for ((index, step) in plan.steps.withIndex()) {
+                    // V1 only gates Irreversible. Reversible auto-runs (Phase 2 will add bulk pre-confirm UX).
+                    if (step.sideEffect == SideEffect.Irreversible) {
+                        emit(RuntimeEvent.GateRequested(index, step))
+                        val decision = gate.receive()
+                        if (decision == GateDecision.Cancel) {
+                            audit.record(step.toolName, step.sideEffect, ok = false)
+                            emit(RuntimeEvent.Failed(reason = "cancelled by user"))
+                            return@flow
+                        }
+                    }
+
+                    emit(RuntimeEvent.StepStarted(index, step))
+                    val action = AutomationAction.ToolDispatch(step.toolName, step.args)
+                    val backend = backends.firstOrNull { it.supports(action) }
+                    val result: BackendResult =
+                        backend?.execute(action)
+                            ?: BackendResult.Failure("no backend supports ${step.toolName}")
+
+                    audit.record(step.toolName, step.sideEffect, ok = result is BackendResult.Success)
+                    context.recordToolResult(
+                        when (result) {
+                            is BackendResult.Success -> ToolResult.Success(result.message)
+                            is BackendResult.Failure -> ToolResult.Failure(result.message)
+                        },
+                    )
+                    emit(RuntimeEvent.StepCompleted(index, step, result))
+
+                    if (result is BackendResult.Failure) {
+                        emit(RuntimeEvent.Failed(reason = result.message))
                         return@flow
                     }
                 }
 
-                emit(RuntimeEvent.StepStarted(index, step))
-                val action = AutomationAction.ToolDispatch(step.toolName, step.args)
-                val backend = backends.firstOrNull { it.supports(action) }
-                val result: BackendResult = backend?.execute(action)
-                    ?: BackendResult.Failure("no backend supports ${step.toolName}")
-
-                audit.record(step.toolName, step.sideEffect, ok = result is BackendResult.Success)
-                context.recordToolResult(
-                    when (result) {
-                        is BackendResult.Success -> ToolResult.Success(result.message)
-                        is BackendResult.Failure -> ToolResult.Failure(result.message)
-                    },
-                )
-                emit(RuntimeEvent.StepCompleted(index, step, result))
-
-                if (result is BackendResult.Failure) {
-                    emit(RuntimeEvent.Failed(reason = result.message))
-                    return@flow
-                }
+                emit(RuntimeEvent.Done(summary = "done"))
+            } finally {
+                currentGate = null
+                gate.close()
+                context.endTurn()
             }
-
-            emit(RuntimeEvent.Done(summary = "done"))
-        } finally {
-            currentGate = null
-            gate.close()
-            context.endTurn()
         }
-    }
 
     /** Called by UI in response to [RuntimeEvent.GateRequested]. */
     suspend fun resume(decision: GateDecision) {

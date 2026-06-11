@@ -11,9 +11,10 @@ import com.mitra.tools.SideEffect
  * ("strict / balanced / loose") plugs in here.
  */
 object ConfirmationGate {
-    fun requiresConfirm(sideEffect: SideEffect?): Boolean = when (sideEffect) {
-        SideEffect.None -> false
-        null -> true // unknown tool — fail safe
-        else -> true
-    }
+    fun requiresConfirm(sideEffect: SideEffect?): Boolean =
+        when (sideEffect) {
+            SideEffect.None -> false
+            null -> true // unknown tool — fail safe
+            else -> true
+        }
 }

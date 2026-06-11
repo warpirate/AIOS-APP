@@ -5,7 +5,9 @@ import android.content.Intent
 import android.net.Uri
 
 /** Opens a web page in the user's browser via an ACTION_VIEW intent (no permission needed). */
-class OpenUrl(private val context: Context) : Tool {
+class OpenUrl(
+    private val context: Context,
+) : Tool {
     override val name = "open_url"
     override val sideEffect = SideEffect.None
 

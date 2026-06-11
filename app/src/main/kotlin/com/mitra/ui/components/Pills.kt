@@ -50,13 +50,19 @@ fun MitraStatePill(
             border = if (isLight) MaterialTheme.colorScheme.outline else Color.Transparent
         }
         PillKind.RUNNING -> {
-            fill = semantic.info; fg = onSemantic; border = Color.Transparent
+            fill = semantic.info
+            fg = onSemantic
+            border = Color.Transparent
         }
         PillKind.DONE -> {
-            fill = semantic.success; fg = onSemantic; border = Color.Transparent
+            fill = semantic.success
+            fg = onSemantic
+            border = Color.Transparent
         }
         PillKind.FAILED -> {
-            fill = MaterialTheme.colorScheme.error; fg = onSemantic; border = Color.Transparent
+            fill = MaterialTheme.colorScheme.error
+            fg = onSemantic
+            border = Color.Transparent
         }
     }
 
@@ -70,10 +76,11 @@ fun MitraStatePill(
         Text(
             text = label,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.2.sp,
-            ),
+            style =
+                MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.2.sp,
+                ),
         )
     }
 }

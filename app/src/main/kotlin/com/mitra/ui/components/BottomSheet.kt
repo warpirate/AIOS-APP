@@ -52,26 +52,31 @@ fun MitraBottomSheet(
 ) {
     val scrimInteraction = remember { MutableInteractionSource() }
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.48f))
-            .clickable(
-                interactionSource = scrimInteraction,
-                indication = null,
-                role = Role.Button,
-                onClickLabel = "Dismiss $title",
-            ) { onDismiss() },
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.48f))
+                .clickable(
+                    interactionSource = scrimInteraction,
+                    indication = null,
+                    role = Role.Button,
+                    onClickLabel = "Dismiss $title",
+                ) { onDismiss() },
         contentAlignment = Alignment.BottomCenter,
     ) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics(mergeDescendants = false) {
-                    role = Role.Image // Compose has no built-in Dialog role — best approximation
-                    contentDescription = title
-                    dismiss { onDismiss(); true }
-                }
-                .clickable(enabled = false, onClick = {}), // swallow taps so they don't dismiss
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .semantics(mergeDescendants = false) {
+                        role = Role.Image // Compose has no built-in Dialog role — best approximation
+                        contentDescription = title
+                        dismiss {
+                            onDismiss()
+                            true
+                        }
+                    }.clickable(enabled = false, onClick = {}),
+            // swallow taps so they don't dismiss
             color = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface,
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),

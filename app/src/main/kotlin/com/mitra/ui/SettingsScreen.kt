@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -67,16 +66,18 @@ fun SettingsScreen(
     var ttsEnabled by remember { mutableStateOf(UserPrefs.ttsEnabled(context)) }
 
     DisposableEffect(lifecycle) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) snapshot = Permissions.snapshot(context)
-        }
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) snapshot = Permissions.snapshot(context)
+            }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
 
-    val bluetoothLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-    ) { snapshot = Permissions.snapshot(context) }
+    val bluetoothLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission(),
+        ) { snapshot = Permissions.snapshot(context) }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -118,8 +119,11 @@ fun SettingsScreen(
                         status = status,
                         onTap = {
                             val runtime = Permissions.runtimePermission(status.permission)
-                            if (runtime != null && !status.granted) bluetoothLauncher.launch(runtime)
-                            else Permissions.launchGrant(context, status.permission)
+                            if (runtime != null && !status.granted) {
+                                bluetoothLauncher.launch(runtime)
+                            } else {
+                                Permissions.launchGrant(context, status.permission)
+                            }
                         },
                     )
                 }
@@ -176,10 +180,11 @@ private fun ToggleRow(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
@@ -209,13 +214,19 @@ private fun PermissionRow(status: PermissionStatus, onTap: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(iconFor(status.permission), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Icon(
+                    iconFor(status.permission),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(titleFor(status.permission), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -247,20 +258,23 @@ private fun PermissionRow(status: PermissionStatus, onTap: () -> Unit) {
     }
 }
 
-private fun iconFor(p: Permission): ImageVector = when (p) {
-    Permission.WRITE_SETTINGS -> Icons.Filled.BrightnessMedium
-    Permission.NOTIFICATION_POLICY -> Icons.Filled.NotificationsOff
-    Permission.BLUETOOTH_CONNECT -> Icons.Filled.Bluetooth
-}
+private fun iconFor(p: Permission): ImageVector =
+    when (p) {
+        Permission.WRITE_SETTINGS -> Icons.Filled.BrightnessMedium
+        Permission.NOTIFICATION_POLICY -> Icons.Filled.NotificationsOff
+        Permission.BLUETOOTH_CONNECT -> Icons.Filled.Bluetooth
+    }
 
-private fun titleFor(p: Permission): String = when (p) {
-    Permission.WRITE_SETTINGS -> "System settings"
-    Permission.NOTIFICATION_POLICY -> "Do Not Disturb"
-    Permission.BLUETOOTH_CONNECT -> "Bluetooth"
-}
+private fun titleFor(p: Permission): String =
+    when (p) {
+        Permission.WRITE_SETTINGS -> "System settings"
+        Permission.NOTIFICATION_POLICY -> "Do Not Disturb"
+        Permission.BLUETOOTH_CONNECT -> "Bluetooth"
+    }
 
-private fun whyFor(p: Permission): String = when (p) {
-    Permission.WRITE_SETTINGS -> "Brightness, auto-rotate, screen timeout"
-    Permission.NOTIFICATION_POLICY -> "Turn Do Not Disturb on or off, silent mode"
-    Permission.BLUETOOTH_CONNECT -> "Switch Bluetooth on and off"
-}
+private fun whyFor(p: Permission): String =
+    when (p) {
+        Permission.WRITE_SETTINGS -> "Brightness, auto-rotate, screen timeout"
+        Permission.NOTIFICATION_POLICY -> "Turn Do Not Disturb on or off, silent mode"
+        Permission.BLUETOOTH_CONNECT -> "Switch Bluetooth on and off"
+    }

@@ -15,34 +15,38 @@ class TurnOnlyContextStoreTest {
     }
 
     @Test
-    fun `beginTurn exposes the utterance via turn`() = runBlocking {
-        val s = TurnOnlyContextStore()
-        val u = UserUtterance(text = "open whatsapp", source = "qs-tile")
-        s.beginTurn(u)
-        assertEquals("open whatsapp", s.turn()?.utterance?.text)
-    }
+    fun `beginTurn exposes the utterance via turn`() =
+        runBlocking {
+            val s = TurnOnlyContextStore()
+            val u = UserUtterance(text = "open whatsapp", source = "qs-tile")
+            s.beginTurn(u)
+            assertEquals("open whatsapp", s.turn()?.utterance?.text)
+        }
 
     @Test
-    fun `endTurn clears the turn context`() = runBlocking {
-        val s = TurnOnlyContextStore()
-        s.beginTurn(UserUtterance("hi", "qs-tile"))
-        s.endTurn()
-        assertNull(s.turn())
-    }
+    fun `endTurn clears the turn context`() =
+        runBlocking {
+            val s = TurnOnlyContextStore()
+            s.beginTurn(UserUtterance("hi", "qs-tile"))
+            s.endTurn()
+            assertNull(s.turn())
+        }
 
     @Test
-    fun `lastToolResult is null at turn start`() = runBlocking {
-        val s = TurnOnlyContextStore()
-        s.beginTurn(UserUtterance("hi", "qs-tile"))
-        assertNull(s.turn()?.lastToolResult)
-    }
+    fun `lastToolResult is null at turn start`() =
+        runBlocking {
+            val s = TurnOnlyContextStore()
+            s.beginTurn(UserUtterance("hi", "qs-tile"))
+            assertNull(s.turn()?.lastToolResult)
+        }
 
     @Test
-    fun `recordToolResult attaches to current turn`() = runBlocking {
-        val s = TurnOnlyContextStore()
-        s.beginTurn(UserUtterance("hi", "qs-tile"))
-        s.recordToolResult(ToolResult.Success("ok"))
-        val r = s.turn()?.lastToolResult
-        assertEquals("ok", (r as? ToolResult.Success)?.message)
-    }
+    fun `recordToolResult attaches to current turn`() =
+        runBlocking {
+            val s = TurnOnlyContextStore()
+            s.beginTurn(UserUtterance("hi", "qs-tile"))
+            s.recordToolResult(ToolResult.Success("ok"))
+            val r = s.turn()?.lastToolResult
+            assertEquals("ok", (r as? ToolResult.Success)?.message)
+        }
 }

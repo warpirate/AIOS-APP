@@ -53,39 +53,45 @@ fun MitraSwitch(
     val anim = tween<androidx.compose.ui.graphics.Color>(MitraTokens.motionFast)
     val trackBg by animateColorAsState(
         if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-        animationSpec = anim, label = "MitraSwitch.trackBg",
+        animationSpec = anim,
+        label = "MitraSwitch.trackBg",
     )
     val borderColor by animateColorAsState(
         if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-        animationSpec = anim, label = "MitraSwitch.border",
+        animationSpec = anim,
+        label = "MitraSwitch.border",
     )
     val thumbColor by animateColorAsState(
         if (checked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.outline,
-        animationSpec = anim, label = "MitraSwitch.thumb",
+        animationSpec = anim,
+        label = "MitraSwitch.thumb",
     )
     val thumbSize by animateDpAsState(
         if (checked) 20.dp else 16.dp,
-        animationSpec = tween(MitraTokens.motionFast), label = "MitraSwitch.thumbSize",
+        animationSpec = tween(MitraTokens.motionFast),
+        label = "MitraSwitch.thumbSize",
     )
     val thumbX by animateDpAsState(
         if (checked) 26.dp else 6.dp,
-        animationSpec = tween(MitraTokens.motionFast), label = "MitraSwitch.thumbX",
+        animationSpec = tween(MitraTokens.motionFast),
+        label = "MitraSwitch.thumbX",
     )
     val thumbY by animateDpAsState(
         if (checked) 4.dp else 6.dp,
-        animationSpec = tween(MitraTokens.motionFast), label = "MitraSwitch.thumbY",
+        animationSpec = tween(MitraTokens.motionFast),
+        label = "MitraSwitch.thumbY",
     )
 
     Box(
-        modifier = modifier
-            .defaultMinSize(minWidth = 56.dp, minHeight = 48.dp)
-            .semantics {
-                role = Role.Switch
-                toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
-                contentDescription = label
-            }
-            .clickable(enabled = enabled) { onCheckedChange(!checked) }
-            .padding(2.dp),
+        modifier =
+            modifier
+                .defaultMinSize(minWidth = 56.dp, minHeight = 48.dp)
+                .semantics {
+                    role = Role.Switch
+                    toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+                    contentDescription = label
+                }.clickable(enabled = enabled) { onCheckedChange(!checked) }
+                .padding(2.dp),
         contentAlignment = Alignment.Center,
     ) {
         Surface(
@@ -96,11 +102,12 @@ fun MitraSwitch(
         ) {
             Box {
                 Box(
-                    modifier = Modifier
-                        .offset(x = thumbX, y = thumbY)
-                        .size(thumbSize)
-                        .clip(CircleShape)
-                        .background(thumbColor),
+                    modifier =
+                        Modifier
+                            .offset(x = thumbX, y = thumbY)
+                            .size(thumbSize)
+                            .clip(CircleShape)
+                            .background(thumbColor),
                 )
             }
         }

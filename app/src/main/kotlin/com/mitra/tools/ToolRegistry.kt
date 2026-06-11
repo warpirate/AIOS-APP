@@ -8,19 +8,20 @@ import android.content.Context
  * ToolCall to the matching Tool by name.
  */
 object ToolRegistry {
-    fun all(context: Context): List<Tool> = listOf(
-        ToggleFlashlight(context),
-        SetAlarm(context),
-        StartTimer(context),
-        OpenUrl(context),
-        OpenApp(context),
-        OpenSettings(context),
-        SetMediaVolume(context),
-        SetBrightness(context),
-        SetDnd(context),
-        SetRingerMode(context),
-        SetAutoRotate(context),
-        SetScreenTimeout(context),
-        SetBluetooth(context),
-    )
+    fun all(context: Context): List<Tool> =
+        listOf(
+            ToggleFlashlight(context),
+            SetAlarm(context),
+            StartTimer(context),
+            OpenUrl(context),
+            OpenApp(context),
+            OpenSettings(context),
+            SetMediaVolume(context),
+            SetBrightness(context),
+            SetDnd(context),
+            SetRingerMode(context),
+            SetAutoRotate(context),
+            SetScreenTimeout(context),
+            SetBluetooth(context),
+        )
 }

@@ -18,5 +18,6 @@ data class UserUtterance(
  */
 interface InvocationSource {
     val id: String
+
     fun events(): Flow<UserUtterance>
 }

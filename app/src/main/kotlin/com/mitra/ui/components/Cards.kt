@@ -55,5 +55,6 @@ fun MitraCardVariant(
 
 @Composable
 private fun Padded(content: @Composable () -> Unit) {
-    androidx.compose.foundation.layout.Box(Modifier.padding(MitraTokens.md)) { content() }
+    androidx.compose.foundation.layout
+        .Box(Modifier.padding(MitraTokens.md)) { content() }
 }

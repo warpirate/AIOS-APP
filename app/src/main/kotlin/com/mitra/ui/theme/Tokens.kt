@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.dp
  * not a control panel.
  */
 object MitraTokens {
-
     /** Warm parchment-cream light palette. Outline > shadow for separation. */
     object Light {
         val bg = Color(0xFFFAF7F2)
@@ -79,8 +78,10 @@ object MitraTokens {
     // ---- Motion -----------------------------------------------------------
     /** Micro-feedback: button press scale, chip select, toggle flip. */
     const val motionFast = 120
+
     /** Standard transitions: tab change, card expand, sheet half-open. */
     const val motionBase = 220
+
     /** Narrative moments: model-loaded, route change, audit-log open. */
     const val motionSlow = 360
 

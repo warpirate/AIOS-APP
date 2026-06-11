@@ -1,7 +1,8 @@
 package com.mitra.ui
 
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -45,14 +46,12 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RingVolume
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timer
@@ -70,6 +69,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -81,21 +81,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TileMode
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.mitra.agent.AgentRuntime
 import com.mitra.agent.GateDecision
 import com.mitra.agent.RuntimeEvent
@@ -104,20 +104,22 @@ import com.mitra.prefs.UserPrefs
 import com.mitra.safety.ConfirmationGate
 import com.mitra.tts.TtsReader
 import com.mitra.ui.theme.Mitra
-import androidx.compose.runtime.DisposableEffect
-import androidx.activity.compose.BackHandler
-import androidx.activity.ComponentActivity
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
 private sealed interface ChatItem
-private data class UserMsg(val text: String) : ChatItem
-private data class MitraMsg(val text: String) : ChatItem
+
+private data class UserMsg(
+    val text: String,
+) : ChatItem
+
+private data class MitraMsg(
+    val text: String,
+) : ChatItem
+
 private enum class ActionState { CONFIRM, RUNNING, DONE, CANCELLED, FAILED }
+
 private data class ActionCard(
     val id: Int,
     val title: String,
@@ -126,7 +128,12 @@ private data class ActionCard(
     val call: ToolCall? = null,
 ) : ChatItem
 
-private data class Suggestion(val icon: ImageVector, val title: String, val subtitle: String, val prompt: String)
+private data class Suggestion(
+    val icon: ImageVector,
+    val title: String,
+    val subtitle: String,
+    val prompt: String,
+)
 
 @Composable
 fun ChatScreen(
@@ -150,9 +157,10 @@ fun ChatScreen(
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var ttsEnabled by remember { mutableStateOf(UserPrefs.ttsEnabled(context)) }
     DisposableEffect(lifecycle) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) ttsEnabled = UserPrefs.ttsEnabled(context)
-        }
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) ttsEnabled = UserPrefs.ttsEnabled(context)
+            }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
@@ -173,21 +181,24 @@ fun ChatScreen(
     fun cardIndex(id: Int) = items.indexOfFirst { it is ActionCard && it.id == id }
 
     fun finishCard(id: Int, success: Boolean, detail: String) {
-        val i = cardIndex(id); if (i < 0) return
+        val i = cardIndex(id)
+        if (i < 0) return
         val card = items[i] as ActionCard
-        items[i] = card.copy(
-            state = if (success) ActionState.DONE else ActionState.FAILED,
-            detail = detail,
-        )
+        items[i] =
+            card.copy(
+                state = if (success) ActionState.DONE else ActionState.FAILED,
+                detail = detail,
+            )
         // Stronger native feedback than Compose's LocalHapticFeedback. CONFIRM is API 30+ (rich
         // tactile click); LONG_PRESS is the universal fallback that still feels firm on older OEMs.
         // FLAG_IGNORE_VIEW_SETTING ensures it fires even if the view's own haptic flag is off.
         if (success) {
-            val constant = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                android.view.HapticFeedbackConstants.CONFIRM
-            } else {
-                android.view.HapticFeedbackConstants.LONG_PRESS
-            }
+            val constant =
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    android.view.HapticFeedbackConstants.CONFIRM
+                } else {
+                    android.view.HapticFeedbackConstants.LONG_PRESS
+                }
             view.performHapticFeedback(constant, android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
         }
         // FAILED haptic deferred: needs VIBRATE perm + ADR for the rejection waveform pattern.
@@ -195,7 +206,8 @@ fun ChatScreen(
 
     fun runCard(id: Int) {
         // Approve gate: tell the active runtime to proceed.
-        val i = cardIndex(id); if (i < 0) return
+        val i = cardIndex(id)
+        if (i < 0) return
         val card = items[i] as ActionCard
         // Guard against stale resume: only Irreversible steps enter CONFIRM and own a pending gate.
         // Reversible cards start as RUNNING — calling resume() with no active gate throws (AgentRuntime
@@ -206,7 +218,8 @@ fun ChatScreen(
     }
 
     fun cancelCard(id: Int) {
-        val i = cardIndex(id); if (i < 0) return
+        val i = cardIndex(id)
+        if (i < 0) return
         val card = items[i] as ActionCard
         // Same stale-resume guard as runCard — only CONFIRM cards have a pending gate to cancel.
         if (card.state != ActionState.CONFIRM) return
@@ -228,10 +241,11 @@ fun ChatScreen(
         val msgIdx = items.size
         items.add(MitraMsg(""))
         scope.launch {
-            val runtime = buildRuntime { chunk ->
-                // Update the streaming reply bubble as chunks arrive.
-                if (msgIdx < items.size) items[msgIdx] = MitraMsg(chunk)
-            }
+            val runtime =
+                buildRuntime { chunk ->
+                    // Update the streaming reply bubble as chunks arrive.
+                    if (msgIdx < items.size) items[msgIdx] = MitraMsg(chunk)
+                }
             activeRuntime = runtime
             var lastCardId: Int? = null
             runtime.run(com.mitra.agent.UserUtterance(text = text, source = "chat")).collect { event ->
@@ -252,8 +266,12 @@ fun ChatScreen(
                                     id = id,
                                     title = actionTitle(call),
                                     detail = actionDetail(call),
-                                    state = if (gated && step.sideEffect == com.mitra.tools.SideEffect.Irreversible)
-                                        ActionState.CONFIRM else ActionState.RUNNING,
+                                    state =
+                                        if (gated && step.sideEffect == com.mitra.tools.SideEffect.Irreversible) {
+                                            ActionState.CONFIRM
+                                        } else {
+                                            ActionState.RUNNING
+                                        },
                                     call = call,
                                 ),
                             )
@@ -264,20 +282,22 @@ fun ChatScreen(
                         finishCard(
                             id = id,
                             success = event.result is com.mitra.automation.BackendResult.Success,
-                            detail = when (val r = event.result) {
-                                is com.mitra.automation.BackendResult.Success -> r.message
-                                is com.mitra.automation.BackendResult.Failure -> r.message
-                            },
+                            detail =
+                                when (val r = event.result) {
+                                    is com.mitra.automation.BackendResult.Success -> r.message
+                                    is com.mitra.automation.BackendResult.Failure -> r.message
+                                },
                         )
                     }
                     is RuntimeEvent.Done -> {
                         if (lastCardId == null && msgIdx < items.size) {
                             val spoken = (items[msgIdx] as? MitraMsg)?.text.orEmpty()
-                            val msg = when {
-                                spoken.isNotBlank() -> spoken
-                                event.summary == "nothing to do" -> "I'm not sure how to help with that one yet."
-                                else -> event.summary
-                            }
+                            val msg =
+                                when {
+                                    spoken.isNotBlank() -> spoken
+                                    event.summary == "nothing to do" -> "I'm not sure how to help with that one yet."
+                                    else -> event.summary
+                                }
                             items[msgIdx] = MitraMsg(msg)
                         }
                     }
@@ -311,11 +331,12 @@ fun ChatScreen(
                 itemsIndexed(items) { index, item ->
                     when (item) {
                         is UserMsg -> UserBubble(item.text)
-                        is MitraMsg -> MitraReply(
-                            text = item.text,
-                            busy = busy && index == items.lastIndex,
-                            onSpeak = if (ttsEnabled) ({ tts.speak(item.text) }) else null,
-                        )
+                        is MitraMsg ->
+                            MitraReply(
+                                text = item.text,
+                                busy = busy && index == items.lastIndex,
+                                onSpeak = if (ttsEnabled) ({ tts.speak(item.text) }) else null,
+                            )
                         is ActionCard -> ActionCardView(item, onConfirm = ::runCard, onCancel = ::cancelCard)
                     }
                 }
@@ -326,86 +347,91 @@ fun ChatScreen(
     }
 }
 
-private fun actionTitle(call: ToolCall): String = when (call.name) {
-    "toggle_flashlight" -> if (call.args["on"] == false) "Turn flashlight off" else "Turn flashlight on"
-    "set_alarm" -> "Set alarm"
-    "start_timer" -> "Start timer"
-    "open_url" -> "Open link"
-    "open_app" -> "Open app"
-    "open_settings" -> "Open settings"
-    "set_media_volume" -> "Set volume"
-    "set_brightness" -> "Set brightness"
-    "set_dnd" -> if (call.args["on"] == false) "Turn Do Not Disturb off" else "Turn Do Not Disturb on"
-    "set_ringer_mode" -> "Set ringer"
-    "set_auto_rotate" -> if (call.args["on"] == false) "Turn auto-rotate off" else "Turn auto-rotate on"
-    "set_screen_timeout" -> "Set screen timeout"
-    "set_bluetooth" -> if (call.args["on"] == false) "Turn Bluetooth off" else "Turn Bluetooth on"
-    else -> call.name.replace('_', ' ').replaceFirstChar { it.uppercase() }
-}
+private fun actionTitle(call: ToolCall): String =
+    when (call.name) {
+        "toggle_flashlight" -> if (call.args["on"] == false) "Turn flashlight off" else "Turn flashlight on"
+        "set_alarm" -> "Set alarm"
+        "start_timer" -> "Start timer"
+        "open_url" -> "Open link"
+        "open_app" -> "Open app"
+        "open_settings" -> "Open settings"
+        "set_media_volume" -> "Set volume"
+        "set_brightness" -> "Set brightness"
+        "set_dnd" -> if (call.args["on"] == false) "Turn Do Not Disturb off" else "Turn Do Not Disturb on"
+        "set_ringer_mode" -> "Set ringer"
+        "set_auto_rotate" -> if (call.args["on"] == false) "Turn auto-rotate off" else "Turn auto-rotate on"
+        "set_screen_timeout" -> "Set screen timeout"
+        "set_bluetooth" -> if (call.args["on"] == false) "Turn Bluetooth off" else "Turn Bluetooth on"
+        else -> call.name.replace('_', ' ').replaceFirstChar { it.uppercase() }
+    }
 
-private fun actionDetail(call: ToolCall): String = when (call.name) {
-    "set_alarm" -> {
-        val h = (call.args["hour"] as? Number)?.toInt()
-        val m = (call.args["minute"] as? Number)?.toInt() ?: 0
-        if (h != null) String.format("for %02d:%02d", h, m) else ""
-    }
-    "start_timer" -> {
-        val s = (call.args["seconds"] as? Number)?.toInt() ?: return ""
-        when {
-            s % 3600 == 0 -> "${s / 3600} hr"
-            s % 60 == 0 -> "${s / 60} min"
-            else -> "${s} sec"
+private fun actionDetail(call: ToolCall): String =
+    when (call.name) {
+        "set_alarm" -> {
+            val h = (call.args["hour"] as? Number)?.toInt()
+            val m = (call.args["minute"] as? Number)?.toInt() ?: 0
+            if (h != null) String.format("for %02d:%02d", h, m) else ""
         }
-    }
-    "open_url" -> (call.args["url"] as? String).orEmpty()
-    "open_app" -> (call.args["name"] as? String) ?: (call.args["package_name"] as? String).orEmpty()
-    "open_settings" -> (call.args["panel"] as? String)
-        ?.replace('_', ' ')
-        ?.replaceFirstChar { it.uppercase() }
-        .orEmpty()
-    "set_media_volume" -> {
-        val level = (call.args["level"] as? Number)?.toInt() ?: return ""
-        "to $level%"
-    }
-    "set_brightness" -> {
-        val level = (call.args["level"] as? Number)?.toInt() ?: return ""
-        "to $level%"
-    }
-    "set_ringer_mode" -> when ((call.args["mode"] as? String)?.lowercase()) {
-        "silent" -> "to silent"
-        "vibrate" -> "to vibrate"
-        "normal", "ring" -> "to ring"
+        "start_timer" -> {
+            val s = (call.args["seconds"] as? Number)?.toInt() ?: return ""
+            when {
+                s % 3600 == 0 -> "${s / 3600} hr"
+                s % 60 == 0 -> "${s / 60} min"
+                else -> "$s sec"
+            }
+        }
+        "open_url" -> (call.args["url"] as? String).orEmpty()
+        "open_app" -> (call.args["name"] as? String) ?: (call.args["package_name"] as? String).orEmpty()
+        "open_settings" ->
+            (call.args["panel"] as? String)
+                ?.replace('_', ' ')
+                ?.replaceFirstChar { it.uppercase() }
+                .orEmpty()
+        "set_media_volume" -> {
+            val level = (call.args["level"] as? Number)?.toInt() ?: return ""
+            "to $level%"
+        }
+        "set_brightness" -> {
+            val level = (call.args["level"] as? Number)?.toInt() ?: return ""
+            "to $level%"
+        }
+        "set_ringer_mode" ->
+            when ((call.args["mode"] as? String)?.lowercase()) {
+                "silent" -> "to silent"
+                "vibrate" -> "to vibrate"
+                "normal", "ring" -> "to ring"
+                else -> ""
+            }
+        "set_screen_timeout" -> {
+            val s = (call.args["seconds"] as? Number)?.toInt() ?: 0
+            when {
+                s == 0 -> ""
+                s % 60 == 0 -> "to ${s / 60} min"
+                else -> "to $s sec"
+            }
+        }
+        // Title already speaks for these — no detail needed.
+        "toggle_flashlight", "set_dnd", "set_auto_rotate", "set_bluetooth" -> ""
         else -> ""
     }
-    "set_screen_timeout" -> {
-        val s = (call.args["seconds"] as? Number)?.toInt() ?: 0
-        when {
-            s == 0 -> ""
-            s % 60 == 0 -> "to ${s / 60} min"
-            else -> "to ${s} sec"
-        }
-    }
-    // Title already speaks for these — no detail needed.
-    "toggle_flashlight", "set_dnd", "set_auto_rotate", "set_bluetooth" -> ""
-    else -> ""
-}
 
-private fun toolIcon(name: String): ImageVector = when (name) {
-    "toggle_flashlight" -> Icons.Filled.FlashOn
-    "set_alarm" -> Icons.Outlined.AccessTime
-    "start_timer" -> Icons.Filled.Timer
-    "open_url" -> Icons.Filled.OpenInNew
-    "open_app" -> Icons.Filled.PlayArrow
-    "open_settings" -> Icons.Filled.Tune
-    "set_media_volume" -> Icons.Filled.VolumeUp
-    "set_brightness" -> Icons.Filled.BrightnessMedium
-    "set_dnd" -> Icons.Filled.NotificationsOff
-    "set_ringer_mode" -> Icons.Filled.RingVolume
-    "set_auto_rotate" -> Icons.Filled.PhoneAndroid
-    "set_screen_timeout" -> Icons.Filled.DarkMode
-    "set_bluetooth" -> Icons.Filled.Bluetooth
-    else -> Icons.Outlined.Bolt
-}
+private fun toolIcon(name: String): ImageVector =
+    when (name) {
+        "toggle_flashlight" -> Icons.Filled.FlashOn
+        "set_alarm" -> Icons.Outlined.AccessTime
+        "start_timer" -> Icons.Filled.Timer
+        "open_url" -> Icons.Filled.OpenInNew
+        "open_app" -> Icons.Filled.PlayArrow
+        "open_settings" -> Icons.Filled.Tune
+        "set_media_volume" -> Icons.Filled.VolumeUp
+        "set_brightness" -> Icons.Filled.BrightnessMedium
+        "set_dnd" -> Icons.Filled.NotificationsOff
+        "set_ringer_mode" -> Icons.Filled.RingVolume
+        "set_auto_rotate" -> Icons.Filled.PhoneAndroid
+        "set_screen_timeout" -> Icons.Filled.DarkMode
+        "set_bluetooth" -> Icons.Filled.Bluetooth
+        else -> Icons.Outlined.Bolt
+    }
 
 private fun greeting(): String {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -459,10 +485,11 @@ private fun OnDeviceBadge(modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(Mitra.semantic.success),
+                modifier =
+                    Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(Mitra.semantic.success),
             )
             Text(
                 "On device",
@@ -475,14 +502,15 @@ private fun OnDeviceBadge(modifier: Modifier = Modifier) {
 
 @Composable
 private fun EmptyHero(brainReady: Boolean, onQuickPrompt: (String) -> Unit) {
-    val suggestions = remember {
-        listOf(
-            Suggestion(Icons.Filled.FlashOn, "Turn on the flashlight", "", "Turn on the flashlight"),
-            Suggestion(Icons.Outlined.AccessTime, "Set an alarm for 7:30 am", "", "Set an alarm for 7:30 am"),
-            Suggestion(Icons.Filled.Timer, "Start a 5 minute timer", "", "Start a 5 minute timer"),
-            Suggestion(Icons.Filled.NotificationsOff, "Turn on Do Not Disturb", "", "Turn on Do Not Disturb"),
-        )
-    }
+    val suggestions =
+        remember {
+            listOf(
+                Suggestion(Icons.Filled.FlashOn, "Turn on the flashlight", "", "Turn on the flashlight"),
+                Suggestion(Icons.Outlined.AccessTime, "Set an alarm for 7:30 am", "", "Set an alarm for 7:30 am"),
+                Suggestion(Icons.Filled.Timer, "Start a 5 minute timer", "", "Start a 5 minute timer"),
+                Suggestion(Icons.Filled.NotificationsOff, "Turn on Do Not Disturb", "", "Turn on Do Not Disturb"),
+            )
+        }
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -561,15 +589,16 @@ private fun AnimatedHero(text: String) {
     val clayLight = Color(0xFFD08561)
     val rose = Color(0xFFD9706C)
     val amber = Color(0xFFE8A368)
-    val brush = remember(phase) {
-        val span = 900f
-        Brush.linearGradient(
-            colors = listOf(clayDeep, amber, rose, clayLight, clayDeep),
-            start = Offset(-span + phase * span * 3f, 0f),
-            end = Offset(phase * span * 3f, span * 0.6f),
-            tileMode = TileMode.Mirror,
-        )
-    }
+    val brush =
+        remember(phase) {
+            val span = 900f
+            Brush.linearGradient(
+                colors = listOf(clayDeep, amber, rose, clayLight, clayDeep),
+                start = Offset(-span + phase * span * 3f, 0f),
+                end = Offset(phase * span * 3f, span * 0.6f),
+                tileMode = TileMode.Mirror,
+            )
+        }
     Text(
         text,
         fontSize = 44.sp,
@@ -592,7 +621,13 @@ private fun StaggeredEntry(visible: Boolean, delayMs: Int, content: @Composable 
         animationSpec = tween(durationMillis = 420, delayMillis = delayMs, easing = EaseOutCubic),
         label = "stagger-offset",
     )
-    Box(modifier = Modifier.graphicsLayer { translationY = offset.toPx(); this.alpha = alpha }) {
+    Box(
+        modifier =
+            Modifier.graphicsLayer {
+                translationY = offset.toPx()
+                this.alpha = alpha
+            },
+    ) {
         content()
     }
 }
@@ -606,7 +641,14 @@ private fun SuggestionCard(s: Suggestion, onClick: () -> Unit) {
         label = "press",
     )
     val borderColor by androidx.compose.animation.animateColorAsState(
-        targetValue = if (pressed) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+        targetValue =
+            if (pressed) {
+                MaterialTheme.colorScheme.primary.copy(
+                    alpha = 0.6f,
+                )
+            } else {
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            },
         animationSpec = tween(180),
         label = "border",
     )
@@ -615,15 +657,16 @@ private fun SuggestionCard(s: Suggestion, onClick: () -> Unit) {
         contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(1.dp, borderColor),
-        modifier = Modifier
-            .fillMaxWidth()
-            .scale(scale)
-            .clickable(
-                onClick = {
-                    pressed = true
-                    onClick()
-                },
-            ),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .scale(scale)
+                .clickable(
+                    onClick = {
+                        pressed = true
+                        onClick()
+                    },
+                ),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -669,10 +712,11 @@ private fun UserBubble(text: String) {
 private fun MitraReply(text: String, busy: Boolean, onSpeak: (() -> Unit)?) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Box(
-            modifier = Modifier
-                .size(28.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
+            modifier =
+                Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -687,21 +731,23 @@ private fun MitraReply(text: String, busy: Boolean, onSpeak: (() -> Unit)?) {
             if (text.isBlank() && busy) {
                 ThinkingDots()
             } else {
-                val cursor = if (busy) {
-                    val transition = rememberInfiniteTransition(label = "stream-cursor")
-                    val visible by transition.animateFloat(
-                        initialValue = 0f,
-                        targetValue = 1f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(520, easing = LinearEasing),
-                            repeatMode = RepeatMode.Reverse,
-                        ),
-                        label = "stream-cursor-alpha",
-                    )
-                    if (visible > 0.5f) " ▍" else "  "
-                } else {
-                    ""
-                }
+                val cursor =
+                    if (busy) {
+                        val transition = rememberInfiniteTransition(label = "stream-cursor")
+                        val visible by transition.animateFloat(
+                            initialValue = 0f,
+                            targetValue = 1f,
+                            animationSpec =
+                                infiniteRepeatable(
+                                    animation = tween(520, easing = LinearEasing),
+                                    repeatMode = RepeatMode.Reverse,
+                                ),
+                            label = "stream-cursor-alpha",
+                        )
+                        if (visible > 0.5f) " ▍" else "  "
+                    } else {
+                        ""
+                    }
                 Text(
                     text + cursor,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -739,10 +785,11 @@ private fun ThinkingDots() {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         repeat(3) {
             Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)),
+                modifier =
+                    Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)),
             )
         }
     }
@@ -750,12 +797,13 @@ private fun ThinkingDots() {
 
 @Composable
 private fun ActionCardView(card: ActionCard, onConfirm: (Int) -> Unit, onCancel: (Int) -> Unit) {
-    val accent = when (card.state) {
-        ActionState.DONE -> Color(0xFF8FB97D)
-        ActionState.FAILED -> MaterialTheme.colorScheme.error
-        ActionState.CANCELLED -> MaterialTheme.colorScheme.onSurfaceVariant
-        else -> MaterialTheme.colorScheme.primary
-    }
+    val accent =
+        when (card.state) {
+            ActionState.DONE -> Color(0xFF8FB97D)
+            ActionState.FAILED -> MaterialTheme.colorScheme.error
+            ActionState.CANCELLED -> MaterialTheme.colorScheme.onSurfaceVariant
+            else -> MaterialTheme.colorScheme.primary
+        }
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(22.dp),
@@ -765,10 +813,11 @@ private fun ActionCardView(card: ActionCard, onConfirm: (Int) -> Unit, onCancel:
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(accent.copy(alpha = 0.15f)),
+                    modifier =
+                        Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(accent.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -806,13 +855,14 @@ private fun ActionCardView(card: ActionCard, onConfirm: (Int) -> Unit, onCancel:
 
 @Composable
 private fun StatePill(state: ActionState, accent: Color) {
-    val (label, showSpinner) = when (state) {
-        ActionState.CONFIRM -> "Confirm" to false
-        ActionState.RUNNING -> "Working" to true
-        ActionState.DONE -> "Done" to false
-        ActionState.CANCELLED -> "Cancelled" to false
-        ActionState.FAILED -> "Failed" to false
-    }
+    val (label, showSpinner) =
+        when (state) {
+            ActionState.CONFIRM -> "Confirm" to false
+            ActionState.RUNNING -> "Working" to true
+            ActionState.DONE -> "Done" to false
+            ActionState.CANCELLED -> "Cancelled" to false
+            ActionState.FAILED -> "Failed" to false
+        }
     Surface(
         color = accent.copy(alpha = 0.14f),
         shape = RoundedCornerShape(10.dp),
@@ -879,9 +929,10 @@ private fun GhostButton(label: String, icon: ImageVector, onClick: () -> Unit, m
 private fun FloatingInputBar(value: String, onValueChange: (String) -> Unit, onSend: () -> Unit, enabled: Boolean) {
     Surface(
         color = MaterialTheme.colorScheme.background,
-        modifier = Modifier
-            .fillMaxWidth()
-            .imePadding(),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .imePadding(),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
@@ -903,12 +954,13 @@ private fun FloatingInputBar(value: String, onValueChange: (String) -> Unit, onS
                 shape = RoundedCornerShape(28.dp),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(onSend = { onSend() }),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
             val canSend = enabled && value.isNotBlank()
             Surface(

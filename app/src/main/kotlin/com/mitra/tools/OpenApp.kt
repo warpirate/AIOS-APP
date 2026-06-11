@@ -17,18 +17,23 @@ import android.content.pm.PackageManager
  * Tie-break: whichever resolved app has a launcher intent first wins. We never silently launch a
  * partial match if there's an exact one elsewhere — exact > prefix > substring.
  */
-class OpenApp(private val context: Context) : Tool {
+class OpenApp(
+    private val context: Context,
+) : Tool {
     override val name = "open_app"
     override val sideEffect = SideEffect.None
 
     override fun execute(args: Map<String, Any?>): ToolResult {
-        val query = argString(args["name"]) ?: argString(args["package_name"])
-            ?: return ToolResult.Failure("I need an app name or package")
+        val query =
+            argString(args["name"]) ?: argString(args["package_name"])
+                ?: return ToolResult.Failure("I need an app name or package")
         val pm = context.packageManager
-        val pkg = resolvePackage(pm, query)
-            ?: return ToolResult.Failure("I can't find an app called \"$query\"")
-        val launch = pm.getLaunchIntentForPackage(pkg)
-            ?: return ToolResult.Failure("That app has no launcher entry")
+        val pkg =
+            resolvePackage(pm, query)
+                ?: return ToolResult.Failure("I can't find an app called \"$query\"")
+        val launch =
+            pm.getLaunchIntentForPackage(pkg)
+                ?: return ToolResult.Failure("That app has no launcher entry")
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return runCatching { context.startActivity(launch) }
             .fold(
@@ -37,16 +42,21 @@ class OpenApp(private val context: Context) : Tool {
             )
     }
 
-    private data class Entry(val pkg: String, val label: String)
+    private data class Entry(
+        val pkg: String,
+        val label: String,
+    )
 
     private fun resolvePackage(pm: PackageManager, query: String): String? {
         // 1. Treat as a package id first — saves the launcher enumeration on the common case.
         if (query.contains('.') && pm.getLaunchIntentForPackage(query) != null) return query
 
         val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val entries = pm.queryIntentActivities(launcherIntent, 0)
-            .map { Entry(it.activityInfo.packageName, it.loadLabel(pm).toString()) }
-            .distinctBy { it.pkg }
+        val entries =
+            pm
+                .queryIntentActivities(launcherIntent, 0)
+                .map { Entry(it.activityInfo.packageName, it.loadLabel(pm).toString()) }
+                .distinctBy { it.pkg }
         if (entries.isEmpty()) return null
 
         val q = query.trim().lowercase()

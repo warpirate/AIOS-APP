@@ -16,12 +16,17 @@ data class TurnContext(
  */
 interface ContextStore {
     fun turn(): TurnContext?
+
     suspend fun beginTurn(utterance: UserUtterance)
+
     suspend fun recordToolResult(result: ToolResult)
+
     suspend fun endTurn()
 }
 
-class TurnOnlyContextStore(private val clockMs: () -> Long = { System.currentTimeMillis() }) : ContextStore {
+class TurnOnlyContextStore(
+    private val clockMs: () -> Long = { System.currentTimeMillis() },
+) : ContextStore {
     private var current: TurnContext? = null
 
     override fun turn(): TurnContext? = current

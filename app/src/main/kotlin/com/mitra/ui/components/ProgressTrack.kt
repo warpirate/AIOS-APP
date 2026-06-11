@@ -34,20 +34,22 @@ fun MitraProgressTrack(
 ) {
     val clamped = progress.coerceIn(0f, 1f)
     Box(
-        modifier = modifier
-            .height(6.dp)
-            .clip(RoundedCornerShape(3.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .semantics {
-                contentDescription = label
-                progressBarRangeInfo = ProgressBarRangeInfo(clamped, 0f..1f)
-            },
+        modifier =
+            modifier
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .semantics {
+                    contentDescription = label
+                    progressBarRangeInfo = ProgressBarRangeInfo(clamped, 0f..1f)
+                },
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth(clamped)
-                .fillMaxHeight()
-                .background(MaterialTheme.colorScheme.primary),
+            modifier =
+                Modifier
+                    .fillMaxWidth(clamped)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.primary),
         )
     }
 }

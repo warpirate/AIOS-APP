@@ -6,7 +6,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ConfirmationGateTest {
-
     @Test
     fun `None bypasses confirmation`() {
         assertFalse(ConfirmationGate.requiresConfirm(SideEffect.None))

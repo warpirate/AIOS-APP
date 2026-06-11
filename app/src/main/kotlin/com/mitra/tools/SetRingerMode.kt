@@ -17,25 +17,29 @@ import android.provider.Settings
  * a DND-equivalent). Without that, AudioManager.setRingerMode silently downgrades to vibrate.
  * Mitra checks first and bounces if missing, same flow as [SetDnd].
  */
-class SetRingerMode(private val context: Context) : Tool {
+class SetRingerMode(
+    private val context: Context,
+) : Tool {
     override val name = "set_ringer_mode"
     override val sideEffect = SideEffect.Reversible
 
     override fun execute(args: Map<String, Any?>): ToolResult {
         val raw = argString(args["mode"]) ?: return ToolResult.Failure("I need ring, vibrate, or silent")
-        val mode = when (raw.lowercase().trim()) {
-            "ring", "normal", "loud", "on" -> AudioManager.RINGER_MODE_NORMAL
-            "vibrate", "vib" -> AudioManager.RINGER_MODE_VIBRATE
-            "silent", "mute", "off" -> AudioManager.RINGER_MODE_SILENT
-            else -> return ToolResult.Failure("I don't know a ringer mode called \"$raw\"")
-        }
+        val mode =
+            when (raw.lowercase().trim()) {
+                "ring", "normal", "loud", "on" -> AudioManager.RINGER_MODE_NORMAL
+                "vibrate", "vib" -> AudioManager.RINGER_MODE_VIBRATE
+                "silent", "mute", "off" -> AudioManager.RINGER_MODE_SILENT
+                else -> return ToolResult.Failure("I don't know a ringer mode called \"$raw\"")
+            }
 
         // SILENT requires DND-access on API 24+. Bounce if missing.
         if (mode == AudioManager.RINGER_MODE_SILENT) {
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             if (!nm.isNotificationPolicyAccessGranted) {
-                val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val intent =
+                    Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 runCatching { context.startActivity(intent) }
                 return ToolResult.Failure(
                     "Silent mode needs Do Not Disturb access — grant Mitra on the page I just opened, then ask again",

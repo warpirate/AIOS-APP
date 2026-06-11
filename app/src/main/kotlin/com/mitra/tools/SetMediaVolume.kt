@@ -4,7 +4,9 @@ import android.content.Context
 import android.media.AudioManager
 
 /** Sets the media (music) volume to a 0–100 percentage. No permission needed for the media stream. */
-class SetMediaVolume(private val context: Context) : Tool {
+class SetMediaVolume(
+    private val context: Context,
+) : Tool {
     override val name = "set_media_volume"
     override val sideEffect = SideEffect.Reversible
 

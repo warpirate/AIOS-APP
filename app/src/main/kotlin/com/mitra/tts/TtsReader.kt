@@ -13,14 +13,16 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Lifecycle: construct once per ChatScreen, [shutdown] on dispose. Speak attempts before the engine
  * finishes initialising are dropped silently; the next reply will succeed.
  */
-class TtsReader(context: Context) {
-
+class TtsReader(
+    context: Context,
+) {
     private val ready = AtomicBoolean(false)
-    private val tts: TextToSpeech = TextToSpeech(context.applicationContext) { status ->
-        if (status == TextToSpeech.SUCCESS) {
-            ready.set(true)
+    private val tts: TextToSpeech =
+        TextToSpeech(context.applicationContext) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                ready.set(true)
+            }
         }
-    }
 
     init {
         // Prefer Indian English to match voice.md register; fall back to system default.

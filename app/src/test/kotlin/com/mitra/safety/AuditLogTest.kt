@@ -7,7 +7,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AuditLogTest {
-
     @Test
     fun `records tool name side-effect class and outcome`() {
         val log = AuditLog()
@@ -50,10 +49,12 @@ class AuditLogTest {
         // the moment someone adds a property that could leak (args, message body, contact name).
         // We check Kotlin-declared member properties, not raw JVM fields (which include synthetic
         // entries from the Kotlin compiler / Companion objects / kotlinx serialization, etc).
-        val props = AuditLog.Entry::class.members
-            .filterIsInstance<kotlin.reflect.KProperty1<AuditLog.Entry, *>>()
-            .map { it.name }
-            .toSet()
+        val props =
+            AuditLog.Entry::class
+                .members
+                .filterIsInstance<kotlin.reflect.KProperty1<AuditLog.Entry, *>>()
+                .map { it.name }
+                .toSet()
         assertEquals(setOf("toolName", "sideEffect", "ok", "timestampMs"), props)
     }
 }

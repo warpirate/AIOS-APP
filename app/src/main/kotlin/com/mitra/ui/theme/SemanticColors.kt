@@ -19,9 +19,10 @@ data class MitraSemanticColors(
     val info: Color,
 )
 
-internal val LocalMitraSemanticColors = staticCompositionLocalOf<MitraSemanticColors> {
-    error("MitraSemanticColors not provided — wrap your content in MitraTheme.")
-}
+internal val LocalMitraSemanticColors =
+    staticCompositionLocalOf<MitraSemanticColors> {
+        error("MitraSemanticColors not provided — wrap your content in MitraTheme.")
+    }
 
 /**
  * Theme-extension accessor. Named `Mitra` (not `MitraTheme`) to avoid a name clash with the

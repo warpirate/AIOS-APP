@@ -15,7 +15,9 @@ import java.util.Calendar
  * known-good clock package list explicitly; if all that fails, we fall back to `ACTION_SET_ALARM`
  * at now + duration (universally supported).
  */
-class StartTimer(private val context: Context) : Tool {
+class StartTimer(
+    private val context: Context,
+) : Tool {
     override val name = "start_timer"
     override val sideEffect = SideEffect.Reversible
 
@@ -25,12 +27,13 @@ class StartTimer(private val context: Context) : Tool {
         val label = argString(args["label"]) ?: "Timer"
         val pm = context.packageManager
 
-        val timerIntent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
-            putExtra(AlarmClock.EXTRA_LENGTH, seconds)
-            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-            putExtra(AlarmClock.EXTRA_MESSAGE, label)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        val timerIntent =
+            Intent(AlarmClock.ACTION_SET_TIMER).apply {
+                putExtra(AlarmClock.EXTRA_LENGTH, seconds)
+                putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                putExtra(AlarmClock.EXTRA_MESSAGE, label)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
 
         // 1. Default resolver — fastest path; uses whatever clock the user picked.
         if (timerIntent.resolveActivity(pm) != null) {
@@ -52,13 +55,14 @@ class StartTimer(private val context: Context) : Tool {
         val at = Calendar.getInstance().apply { add(Calendar.SECOND, seconds) }
         val hour = at.get(Calendar.HOUR_OF_DAY)
         val minute = at.get(Calendar.MINUTE)
-        val alarmIntent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
-            putExtra(AlarmClock.EXTRA_HOUR, hour)
-            putExtra(AlarmClock.EXTRA_MINUTES, minute)
-            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-            putExtra(AlarmClock.EXTRA_MESSAGE, label)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        val alarmIntent =
+            Intent(AlarmClock.ACTION_SET_ALARM).apply {
+                putExtra(AlarmClock.EXTRA_HOUR, hour)
+                putExtra(AlarmClock.EXTRA_MINUTES, minute)
+                putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                putExtra(AlarmClock.EXTRA_MESSAGE, label)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
         if (alarmIntent.resolveActivity(pm) != null) {
             val launched = runCatching { context.startActivity(alarmIntent) }.isSuccess
             if (launched) return ToolResult.Success(String.format("Alarm set for %02d:%02d (your clock has no timer)", hour, minute))
@@ -69,20 +73,22 @@ class StartTimer(private val context: Context) : Tool {
     private fun isInstalled(pm: PackageManager, pkg: String): Boolean =
         runCatching { pm.getPackageInfo(pkg, 0) }.isSuccess
 
-    private fun timerMessage(seconds: Int): String = when {
-        seconds % 60 == 0 -> "Timer started for ${seconds / 60} min"
-        seconds < 60 -> "Timer started for $seconds s"
-        else -> "Timer started for ${seconds / 60} min ${seconds % 60} s"
-    }
+    private fun timerMessage(seconds: Int): String =
+        when {
+            seconds % 60 == 0 -> "Timer started for ${seconds / 60} min"
+            seconds < 60 -> "Timer started for $seconds s"
+            else -> "Timer started for ${seconds / 60} min ${seconds % 60} s"
+        }
 
     private companion object {
-        val PREFERRED_CLOCK_PACKAGES = listOf(
-            "com.google.android.deskclock", // Google Clock
-            "com.android.deskclock",        // AOSP / Lineage
-            "com.sec.android.app.clockpackage", // Samsung
-            "com.oneplus.deskclock",        // OnePlus
-            "com.coloros.alarmclock",       // ColorOS (Realme/Oppo)
-            "com.android.calculator2.clock",
-        )
+        val PREFERRED_CLOCK_PACKAGES =
+            listOf(
+                "com.google.android.deskclock", // Google Clock
+                "com.android.deskclock", // AOSP / Lineage
+                "com.sec.android.app.clockpackage", // Samsung
+                "com.oneplus.deskclock", // OnePlus
+                "com.coloros.alarmclock", // ColorOS (Realme/Oppo)
+                "com.android.calculator2.clock",
+            )
     }
 }

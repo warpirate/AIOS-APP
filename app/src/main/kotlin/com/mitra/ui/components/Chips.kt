@@ -1,6 +1,7 @@
 package com.mitra.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
@@ -19,7 +20,6 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.mitra.ui.theme.MitraTokens
-import androidx.compose.foundation.clickable
 
 /**
  * Chip (non-selectable) and FilterChip (selectable) from `mitra.css §Chips`.
@@ -51,7 +51,8 @@ fun MitraChip(
         }
     }
     if (onClick != null) {
-        androidx.compose.foundation.layout.Box(Modifier.clickable(role = Role.Button, onClick = onClick)) { chip() }
+        androidx.compose.foundation.layout
+            .Box(Modifier.clickable(role = Role.Button, onClick = onClick)) { chip() }
     } else {
         chip()
     }
@@ -69,13 +70,13 @@ fun MitraFilterChip(
     val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     val border = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
     androidx.compose.foundation.layout.Box(
-        modifier = modifier
-            .defaultMinSize(minHeight = 48.dp)
-            .semantics {
-                role = Role.Button
-                this.selected = selected
-            }
-            .clickable(onClick = onClick),
+        modifier =
+            modifier
+                .defaultMinSize(minHeight = 48.dp)
+                .semantics {
+                    role = Role.Button
+                    this.selected = selected
+                }.clickable(onClick = onClick),
     ) {
         Surface(
             color = bg,

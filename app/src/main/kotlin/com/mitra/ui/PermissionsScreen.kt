@@ -2,18 +2,6 @@ package com.mitra.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.EaseInOut
-import androidx.compose.animation.core.EaseOutCubic
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,7 +13,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -33,9 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BrightnessMedium
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.NotificationsOff
-import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -51,7 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -79,26 +63,28 @@ fun PermissionsScreen(
     }
 
     DisposableEffect(lifecycle) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                snapshot = Permissions.snapshot(context)
-                if (snapshot.allGranted) {
-                    onContinue()
-                } else if (currentIdx in snapshot.statuses.indices && snapshot.statuses[currentIdx].granted) {
-                    currentIdx = snapshot.firstUngrantedIndex()
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    snapshot = Permissions.snapshot(context)
+                    if (snapshot.allGranted) {
+                        onContinue()
+                    } else if (currentIdx in snapshot.statuses.indices && snapshot.statuses[currentIdx].granted) {
+                        currentIdx = snapshot.firstUngrantedIndex()
+                    }
                 }
             }
-        }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
 
-    val runtimeLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-    ) {
-        snapshot = Permissions.snapshot(context)
-        if (snapshot.allGranted) onContinue() else currentIdx = snapshot.firstUngrantedIndex()
-    }
+    val runtimeLauncher =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission(),
+        ) {
+            snapshot = Permissions.snapshot(context)
+            if (snapshot.allGranted) onContinue() else currentIdx = snapshot.firstUngrantedIndex()
+        }
 
     if (currentIdx !in snapshot.statuses.indices) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {}
@@ -141,14 +127,19 @@ fun PermissionsScreen(
             Spacer(Modifier.weight(0.25f))
             PrimaryActionPill(label = "Grant access") {
                 val runtime = Permissions.runtimePermission(current)
-                if (runtime != null) runtimeLauncher.launch(runtime)
-                else Permissions.launchGrant(context, current)
+                if (runtime != null) {
+                    runtimeLauncher.launch(runtime)
+                } else {
+                    Permissions.launchGrant(context, current)
+                }
             }
             Spacer(Modifier.height(8.dp))
             GhostActionPill(label = "Not now") {
-                val next = snapshot.statuses.drop(currentIdx + 1)
-                    .indexOfFirst { !it.granted }
-                    .let { if (it >= 0) currentIdx + 1 + it else -1 }
+                val next =
+                    snapshot.statuses
+                        .drop(currentIdx + 1)
+                        .indexOfFirst { !it.granted }
+                        .let { if (it >= 0) currentIdx + 1 + it else -1 }
                 if (next < 0) onContinue() else currentIdx = next
             }
         }
@@ -236,34 +227,38 @@ private fun GhostActionPill(label: String, onClick: () -> Unit) {
 private fun PermissionSnapshot.firstUngrantedIndex(): Int =
     statuses.indexOfFirst { !it.granted }
 
-private fun iconFor(p: Permission): ImageVector = when (p) {
-    Permission.WRITE_SETTINGS -> Icons.Filled.BrightnessMedium
-    Permission.NOTIFICATION_POLICY -> Icons.Filled.NotificationsOff
-    Permission.BLUETOOTH_CONNECT -> Icons.Filled.Bluetooth
-}
+private fun iconFor(p: Permission): ImageVector =
+    when (p) {
+        Permission.WRITE_SETTINGS -> Icons.Filled.BrightnessMedium
+        Permission.NOTIFICATION_POLICY -> Icons.Filled.NotificationsOff
+        Permission.BLUETOOTH_CONNECT -> Icons.Filled.Bluetooth
+    }
 
-private fun titleFor(p: Permission): String = when (p) {
-    Permission.WRITE_SETTINGS -> "Change system settings"
-    Permission.NOTIFICATION_POLICY -> "Control Do Not Disturb"
-    Permission.BLUETOOTH_CONNECT -> "Switch Bluetooth on and off"
-}
+private fun titleFor(p: Permission): String =
+    when (p) {
+        Permission.WRITE_SETTINGS -> "Change system settings"
+        Permission.NOTIFICATION_POLICY -> "Control Do Not Disturb"
+        Permission.BLUETOOTH_CONNECT -> "Switch Bluetooth on and off"
+    }
 
-private fun whyFor(p: Permission): String = when (p) {
-    Permission.WRITE_SETTINGS ->
-        "Mitra adjusts brightness, auto-rotate, and screen timeout when you ask."
-    Permission.NOTIFICATION_POLICY ->
-        "Mitra turns Do Not Disturb on or off, and switches the ringer to silent."
-    Permission.BLUETOOTH_CONNECT ->
-        "Mitra switches Bluetooth on and off directly. Without this, Mitra opens the Bluetooth page instead."
-}
+private fun whyFor(p: Permission): String =
+    when (p) {
+        Permission.WRITE_SETTINGS ->
+            "Mitra adjusts brightness, auto-rotate, and screen timeout when you ask."
+        Permission.NOTIFICATION_POLICY ->
+            "Mitra turns Do Not Disturb on or off, and switches the ringer to silent."
+        Permission.BLUETOOTH_CONNECT ->
+            "Mitra switches Bluetooth on and off directly. Without this, Mitra opens the Bluetooth page instead."
+    }
 
 @Composable
 private fun PermissionPreview(perm: Permission) {
-    val resId = when (perm) {
-        Permission.WRITE_SETTINGS -> com.mitra.R.raw.perm_settings
-        Permission.NOTIFICATION_POLICY -> com.mitra.R.raw.perm_dnd
-        Permission.BLUETOOTH_CONNECT -> com.mitra.R.raw.perm_bluetooth
-    }
+    val resId =
+        when (perm) {
+            Permission.WRITE_SETTINGS -> com.mitra.R.raw.perm_settings
+            Permission.NOTIFICATION_POLICY -> com.mitra.R.raw.perm_dnd
+            Permission.BLUETOOTH_CONNECT -> com.mitra.R.raw.perm_bluetooth
+        }
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(24.dp),
@@ -294,5 +289,3 @@ private fun LoopingVideoView(resId: Int, modifier: Modifier = Modifier) {
         },
     )
 }
-
-

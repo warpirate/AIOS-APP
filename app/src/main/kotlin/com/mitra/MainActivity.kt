@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.mitra.agent.AgentRuntime
 import com.mitra.agent.IntentParser
@@ -34,7 +35,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.runtime.rememberCoroutineScope
 import java.io.File
 
 private enum class Phase { BOOT, WELCOME, DOWNLOAD, LOADING, PERMISSIONS, CHAT, SETTINGS, ERROR }
@@ -61,16 +61,17 @@ class MainActivity : ComponentActivity() {
                     sideEffectOf = sideEffectOf,
                     buildRuntime = { brain, onChunk ->
                         val parser = IntentParser()
-                        val planner = if (brain != null) {
-                            SingleShotPlanner(
-                                brainStream = brain::chatStream,
-                                parser = parser,
-                                sideEffectOf = sideEffectOf,
-                                onChunk = onChunk,
-                            )
-                        } else {
-                            IntentParserPlanner(parser, sideEffectOf)
-                        }
+                        val planner =
+                            if (brain != null) {
+                                SingleShotPlanner(
+                                    brainStream = brain::chatStream,
+                                    parser = parser,
+                                    sideEffectOf = sideEffectOf,
+                                    onChunk = onChunk,
+                                )
+                            } else {
+                                IntentParserPlanner(parser, sideEffectOf)
+                            }
                         AgentRuntime(planner, listOf(backend), context, audit)
                     },
                 )
@@ -120,9 +121,14 @@ private fun AppRoot(
 
     LaunchedEffect(phase) {
         if (phase == Phase.LOADING) {
-            brain = withContext(Dispatchers.IO) {
-                try { LiteRtBrain(modelFile.absolutePath, cacheDir) } catch (t: Throwable) { null }
-            }
+            brain =
+                withContext(Dispatchers.IO) {
+                    try {
+                        LiteRtBrain(modelFile.absolutePath, cacheDir)
+                    } catch (t: Throwable) {
+                        null
+                    }
+                }
             // Silent background warmup: pages model into RAM, compiles kernels, primes CPU caches.
             // Runs while the user is on Permissions or Chat empty state. By the time they send their
             // first message, the engine is hot. No loading-screen extension, no user-facing message.
@@ -138,35 +144,39 @@ private fun AppRoot(
     when (phase) {
         Phase.BOOT, Phase.LOADING -> LoadingBrainScreen()
         Phase.WELCOME -> WelcomeScreen(onStart = { phase = Phase.DOWNLOAD })
-        Phase.DOWNLOAD -> DownloadScreen(
-            downloaded = downloaded,
-            total = total,
-            paused = paused,
-            done = done,
-            onPauseResume = { paused = !paused },
-            onContinue = { phase = Phase.LOADING },
-        )
-        Phase.PERMISSIONS -> PermissionsScreen(
-            onContinue = {
-                Onboarding.markComplete(ctx)
-                phase = Phase.CHAT
-            },
-        )
-        Phase.CHAT -> ChatScreen(
-            brainReady = brain != null,
-            buildRuntime = { onChunk -> buildRuntime(brain, onChunk) },
-            onOpenSettings = { phase = Phase.SETTINGS },
-        )
+        Phase.DOWNLOAD ->
+            DownloadScreen(
+                downloaded = downloaded,
+                total = total,
+                paused = paused,
+                done = done,
+                onPauseResume = { paused = !paused },
+                onContinue = { phase = Phase.LOADING },
+            )
+        Phase.PERMISSIONS ->
+            PermissionsScreen(
+                onContinue = {
+                    Onboarding.markComplete(ctx)
+                    phase = Phase.CHAT
+                },
+            )
+        Phase.CHAT ->
+            ChatScreen(
+                brainReady = brain != null,
+                buildRuntime = { onChunk -> buildRuntime(brain, onChunk) },
+                onOpenSettings = { phase = Phase.SETTINGS },
+            )
         Phase.SETTINGS -> SettingsScreen(onBack = { phase = Phase.CHAT })
-        Phase.ERROR -> ErrorScreen(
-            message = errorMsg,
-            onRetry = {
-                errorMsg = ""
-                done = false
-                paused = false
-                phase = Phase.DOWNLOAD
-            },
-            onSkip = { phase = Phase.PERMISSIONS },
-        )
+        Phase.ERROR ->
+            ErrorScreen(
+                message = errorMsg,
+                onRetry = {
+                    errorMsg = ""
+                    done = false
+                    paused = false
+                    phase = Phase.DOWNLOAD
+                },
+                onSkip = { phase = Phase.PERMISSIONS },
+            )
     }
 }

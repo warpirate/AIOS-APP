@@ -1,0 +1,21 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+trim_trailing_whitespace = true
+
+[*.{kt,kts}]
+indent_size = 4
+# Mitra's tool descriptions and system prompts run long on purpose — the LLM reads them as one
+# coherent paragraph and breaking them mid-sentence hurts more than helps. Keep the line cap
+# generous; any future ktlint integration can rely on this baseline.
+max_line_length = 140
+
+[*.{xml,yml,yaml}]
+indent_size = 4
+
+[*.{md}]
+trim_trailing_whitespace = false

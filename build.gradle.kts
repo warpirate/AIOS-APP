@@ -9,3 +9,9 @@ plugins {
     id("org.jetbrains.kotlin.android") version "2.2.21" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.2.21" apply false
 }
+
+// ktlint-gradle attempted (plugin 12.1.2, ktlint 1.5.0): the worker fails to parse several
+// otherwise-valid files (AgentLoop.kt, build.gradle.kts, AgentRuntimeTest.kt) and blocks `check`.
+// The autofix ("ktlintFormat") cleanups it produced are kept in this tree as a mechanical
+// style baseline. Revisit once ktlint releases a parser that handles Kotlin 2.2 source cleanly,
+// or switch to spotless-with-ktlint and re-evaluate.
