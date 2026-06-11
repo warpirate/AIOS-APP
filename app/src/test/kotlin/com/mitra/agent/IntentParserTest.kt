@@ -148,4 +148,25 @@ class IntentParserTest {
         val c = parser.route("turn off the flashlight")
         assertEquals("toggle_flashlight", c?.name)
     }
+
+    @Test
+    fun `whats moms number routes to query_contacts`() {
+        val c = parser.route("what's mom's number")
+        assertEquals("query_contacts", c?.name)
+        assertEquals("mom", c?.args?.get("name"))
+    }
+
+    @Test
+    fun `find priya routes to query_contacts`() {
+        val c = parser.route("find priya")
+        assertEquals("query_contacts", c?.name)
+        assertEquals("priya", c?.args?.get("name"))
+    }
+
+    @Test
+    fun `contact raj routes to query_contacts`() {
+        val c = parser.route("contact raj")
+        assertEquals("query_contacts", c?.name)
+        assertEquals("raj", c?.args?.get("name"))
+    }
 }

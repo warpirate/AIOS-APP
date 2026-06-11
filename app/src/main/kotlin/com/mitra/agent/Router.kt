@@ -28,6 +28,20 @@ class IntentParser : Router {
             return ToolCall("open_url", mapOf("url" to it.groupValues[1].trim('.', ',', '!', '?')))
         }
 
+        // Contact lookup — possessive form first so "find priya's contact" captures "priya",
+        // not "priya's contact". Matches: "what's mom's number", "find priya's phone", "raj's contact".
+        Regex("""(?:what'?s|find|show|get|where'?s)\s+(.+?)'?s\s+(?:number|phone|contact|details)""")
+            .find(t)?.let {
+                return ToolCall("query_contacts", mapOf("name" to it.groupValues[1].trim()))
+            }
+
+        // Contact lookup — bare-noun form: "find priya", "contact raj", "number for amma".
+        // Constrained to a single \w+ token so it doesn't swallow "find the brightness slider"
+        // or "contact support page".
+        Regex("""(?:find|contact|number for)\s+(\w+)\b""").find(t)?.let {
+            return ToolCall("query_contacts", mapOf("name" to it.groupValues[1].trim()))
+        }
+
         // Real-API tools BEFORE the panel resolver. Each requires an explicit on/off verb so a
         // bare noun ("bluetooth?", "dnd") still falls through to the panel resolver below.
         explicitToggle(t, listOf("dnd", "do not disturb", "zen mode"))?.let {
