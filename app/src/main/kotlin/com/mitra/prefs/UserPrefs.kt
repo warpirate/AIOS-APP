@@ -6,6 +6,7 @@ object UserPrefs {
     private const val PREFS = "mitra_user"
     private const val KEY_NAME = "user_name"
     private const val KEY_LAST_UTTERANCE = "last_utterance"
+    private const val KEY_TTS_ENABLED = "tts_enabled"
     private const val MAX_UTTERANCE_LEN = 240
 
     fun name(context: Context): String =
@@ -39,6 +40,17 @@ object UserPrefs {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .remove(KEY_LAST_UTTERANCE)
+            .apply()
+    }
+
+    fun ttsEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_TTS_ENABLED, false)
+
+    fun setTtsEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_TTS_ENABLED, enabled)
             .apply()
     }
 }
