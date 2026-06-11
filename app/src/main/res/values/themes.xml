@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Compose draws its own Material 3 surfaces; this is just the window shell. -->
-    <style name="Theme.Mitra" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Compose draws its own Material 3 surfaces; this is just the window shell.
+         windowBackground = parchment cream so the first frame before Compose mounts isn't black. -->
+    <style name="Theme.Mitra" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/mitra_window_bg</item>
+    </style>
 </resources>

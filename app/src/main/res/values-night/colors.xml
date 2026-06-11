@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark-mode first-frame color. Matches MitraTokens.Dark.bg (warm near-black). -->
+    <color name="mitra_window_bg">#1A1715</color>
+</resources>

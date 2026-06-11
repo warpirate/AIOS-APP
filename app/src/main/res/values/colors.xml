@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Window background — parchment cream from tokens.md. Used as the first-frame color
+         before Compose mounts. Matches MitraTokens.Light.bg so there is no visible flash. -->
+    <color name="mitra_window_bg">#FAF7F2</color>
+</resources>
