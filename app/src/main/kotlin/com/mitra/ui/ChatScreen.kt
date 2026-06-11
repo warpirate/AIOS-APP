@@ -107,6 +107,9 @@ import com.mitra.ui.theme.Mitra
 import androidx.compose.runtime.DisposableEffect
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -141,6 +144,18 @@ fun ChatScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val tts = remember { TtsReader(context) }
     DisposableEffect(Unit) { onDispose { tts.shutdown() } }
+
+    // TTS opt-in. Re-read on every ON_RESUME so toggling the Settings switch and returning to chat
+    // takes effect immediately (Settings is a different Compose screen pushed over the same activity).
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var ttsEnabled by remember { mutableStateOf(UserPrefs.ttsEnabled(context)) }
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) ttsEnabled = UserPrefs.ttsEnabled(context)
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
 
     // System back on chat = minimize, not finish. Matches WhatsApp / Signal / Messages behavior —
     // the app survives in recents and resumes with chat state intact.
@@ -299,7 +314,7 @@ fun ChatScreen(
                         is MitraMsg -> MitraReply(
                             text = item.text,
                             busy = busy && index == items.lastIndex,
-                            onSpeak = { tts.speak(item.text) },
+                            onSpeak = if (ttsEnabled) ({ tts.speak(item.text) }) else null,
                         )
                         is ActionCard -> ActionCardView(item, onConfirm = ::runCard, onCancel = ::cancelCard)
                     }
@@ -651,7 +666,7 @@ private fun UserBubble(text: String) {
 }
 
 @Composable
-private fun MitraReply(text: String, busy: Boolean, onSpeak: () -> Unit) {
+private fun MitraReply(text: String, busy: Boolean, onSpeak: (() -> Unit)?) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Box(
             modifier = Modifier
@@ -692,7 +707,7 @@ private fun MitraReply(text: String, busy: Boolean, onSpeak: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.bodyLarge,
                 )
-                if (!busy && text.isNotBlank()) {
+                if (!busy && text.isNotBlank() && onSpeak != null) {
                     Spacer(Modifier.size(6.dp))
                     Surface(
                         shape = CircleShape,
