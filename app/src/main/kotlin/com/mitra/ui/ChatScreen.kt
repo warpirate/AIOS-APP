@@ -26,11 +26,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,10 +47,10 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.NotificationsOff
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RingVolume
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
@@ -90,6 +91,7 @@ import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -100,6 +102,11 @@ import com.mitra.agent.RuntimeEvent
 import com.mitra.agent.ToolCall
 import com.mitra.prefs.UserPrefs
 import com.mitra.safety.ConfirmationGate
+import com.mitra.tts.TtsReader
+import com.mitra.ui.theme.Mitra
+import androidx.compose.runtime.DisposableEffect
+import androidx.activity.compose.BackHandler
+import androidx.activity.ComponentActivity
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -130,6 +137,16 @@ fun ChatScreen(
     var nextId by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val view = LocalView.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val tts = remember { TtsReader(context) }
+    DisposableEffect(Unit) { onDispose { tts.shutdown() } }
+
+    // System back on chat = minimize, not finish. Matches WhatsApp / Signal / Messages behavior —
+    // the app survives in recents and resumes with chat state intact.
+    BackHandler {
+        (context as? ComponentActivity)?.moveTaskToBack(/* nonRoot = */ true)
+    }
 
     // The runtime that is currently mid-turn (used to resume gate decisions). Null between turns.
     var activeRuntime by remember { mutableStateOf<AgentRuntime?>(null) }
@@ -147,6 +164,18 @@ fun ChatScreen(
             state = if (success) ActionState.DONE else ActionState.FAILED,
             detail = detail,
         )
+        // Stronger native feedback than Compose's LocalHapticFeedback. CONFIRM is API 30+ (rich
+        // tactile click); LONG_PRESS is the universal fallback that still feels firm on older OEMs.
+        // FLAG_IGNORE_VIEW_SETTING ensures it fires even if the view's own haptic flag is off.
+        if (success) {
+            val constant = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                android.view.HapticFeedbackConstants.CONFIRM
+            } else {
+                android.view.HapticFeedbackConstants.LONG_PRESS
+            }
+            view.performHapticFeedback(constant, android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
+        }
+        // FAILED haptic deferred: needs VIBRATE perm + ADR for the rejection waveform pattern.
     }
 
     fun runCard(id: Int) {
@@ -173,6 +202,11 @@ fun ChatScreen(
     fun send(textOverride: String? = null) {
         val text = (textOverride ?: input).trim()
         if (text.isEmpty() || busy) return
+        view.performHapticFeedback(
+            android.view.HapticFeedbackConstants.KEYBOARD_TAP,
+            android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING,
+        )
+        UserPrefs.setLastUtterance(context, text)
         input = ""
         items.add(UserMsg(text))
         busy = true
@@ -259,10 +293,14 @@ fun ChatScreen(
                 if (items.isEmpty()) {
                     item { EmptyHero(brainReady = brainReady, onQuickPrompt = { send(it) }) }
                 }
-                items(items) { item ->
+                itemsIndexed(items) { index, item ->
                     when (item) {
                         is UserMsg -> UserBubble(item.text)
-                        is MitraMsg -> MitraReply(item.text, busy)
+                        is MitraMsg -> MitraReply(
+                            text = item.text,
+                            busy = busy && index == items.lastIndex,
+                            onSpeak = { tts.speak(item.text) },
+                        )
                         is ActionCard -> ActionCardView(item, onConfirm = ::runCard, onCancel = ::cancelCard)
                     }
                 }
@@ -294,23 +332,46 @@ private fun actionDetail(call: ToolCall): String = when (call.name) {
     "set_alarm" -> {
         val h = (call.args["hour"] as? Number)?.toInt()
         val m = (call.args["minute"] as? Number)?.toInt() ?: 0
-        if (h != null) String.format("for %02d:%02d", h, m) else "alarm"
+        if (h != null) String.format("for %02d:%02d", h, m) else ""
     }
-    "start_timer" -> "${(call.args["seconds"] as? Number)?.toInt() ?: "?"} seconds"
+    "start_timer" -> {
+        val s = (call.args["seconds"] as? Number)?.toInt() ?: return ""
+        when {
+            s % 3600 == 0 -> "${s / 3600} hr"
+            s % 60 == 0 -> "${s / 60} min"
+            else -> "${s} sec"
+        }
+    }
     "open_url" -> (call.args["url"] as? String).orEmpty()
     "open_app" -> (call.args["name"] as? String) ?: (call.args["package_name"] as? String).orEmpty()
-    "open_settings" -> (call.args["panel"] as? String)?.replace('_', ' ').orEmpty()
-    "set_media_volume" -> "to ${(call.args["level"] as? Number)?.toInt() ?: "?"}%"
-    "set_brightness" -> "to ${(call.args["level"] as? Number)?.toInt() ?: "?"}%"
-    "set_dnd" -> ""
-    "set_ringer_mode" -> "to ${(call.args["mode"] as? String) ?: "?"}"
-    "set_auto_rotate" -> ""
+    "open_settings" -> (call.args["panel"] as? String)
+        ?.replace('_', ' ')
+        ?.replaceFirstChar { it.uppercase() }
+        .orEmpty()
+    "set_media_volume" -> {
+        val level = (call.args["level"] as? Number)?.toInt() ?: return ""
+        "to $level%"
+    }
+    "set_brightness" -> {
+        val level = (call.args["level"] as? Number)?.toInt() ?: return ""
+        "to $level%"
+    }
+    "set_ringer_mode" -> when ((call.args["mode"] as? String)?.lowercase()) {
+        "silent" -> "to silent"
+        "vibrate" -> "to vibrate"
+        "normal", "ring" -> "to ring"
+        else -> ""
+    }
     "set_screen_timeout" -> {
         val s = (call.args["seconds"] as? Number)?.toInt() ?: 0
-        if (s == 0) "" else if (s % 60 == 0) "to ${s / 60} min" else "to ${s}s"
+        when {
+            s == 0 -> ""
+            s % 60 == 0 -> "to ${s / 60} min"
+            else -> "to ${s} sec"
+        }
     }
-    "set_bluetooth" -> ""
-    "toggle_flashlight" -> "on your device"
+    // Title already speaks for these — no detail needed.
+    "toggle_flashlight", "set_dnd", "set_auto_rotate", "set_bluetooth" -> ""
     else -> ""
 }
 
@@ -345,20 +406,53 @@ private fun greeting(): String {
 @Composable
 private fun MinimalHeader(brainReady: Boolean, onOpenSettings: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            "Mitra",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
+        Column(
             modifier = Modifier.weight(1f),
-        )
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                "Mitra",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            OnDeviceBadge()
+        }
         IconButton(onClick = onOpenSettings) {
             Icon(
                 Icons.Filled.Settings,
                 contentDescription = "Settings",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun OnDeviceBadge(modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(Mitra.semantic.success),
+            )
+            Text(
+                "On device",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -378,6 +472,7 @@ private fun EmptyHero(brainReady: Boolean, onQuickPrompt: (String) -> Unit) {
     LaunchedEffect(Unit) { visible = true }
     val context = androidx.compose.ui.platform.LocalContext.current
     val name = remember { UserPrefs.name(context) }
+    val lastUtterance = remember { UserPrefs.lastUtterance(context) }
     val heroText = if (name.isNotBlank()) greeting() + ", " + name + "." else greeting() + "."
 
     Column(
@@ -386,10 +481,53 @@ private fun EmptyHero(brainReady: Boolean, onQuickPrompt: (String) -> Unit) {
     ) {
         AnimatedHero(text = heroText)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (lastUtterance.isNotBlank()) {
+                StaggeredEntry(visible = visible, delayMs = 80) {
+                    RepeatLastPill(text = lastUtterance, onClick = { onQuickPrompt(lastUtterance) })
+                }
+            }
             suggestions.forEachIndexed { idx, s ->
                 StaggeredEntry(visible = visible, delayMs = 120 + idx * 90) {
                     SuggestionCard(s, onClick = { onQuickPrompt(s.prompt) })
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RepeatLastPill(text: String, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        onClick = onClick,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                Icons.Filled.Refresh,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Repeat",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -495,27 +633,6 @@ private fun SuggestionCard(s: Suggestion, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PrivacyAssurance() {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Icon(
-            Icons.Outlined.Lock,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(14.dp),
-        )
-        Text(
-            "Runs on your phone. Nothing leaves the device.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
 private fun UserBubble(text: String) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Surface(
@@ -534,7 +651,7 @@ private fun UserBubble(text: String) {
 }
 
 @Composable
-private fun MitraReply(text: String, busy: Boolean) {
+private fun MitraReply(text: String, busy: Boolean, onSpeak: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Box(
             modifier = Modifier
@@ -555,11 +672,41 @@ private fun MitraReply(text: String, busy: Boolean) {
             if (text.isBlank() && busy) {
                 ThinkingDots()
             } else {
+                val cursor = if (busy) {
+                    val transition = rememberInfiniteTransition(label = "stream-cursor")
+                    val visible by transition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 1f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(520, easing = LinearEasing),
+                            repeatMode = RepeatMode.Reverse,
+                        ),
+                        label = "stream-cursor-alpha",
+                    )
+                    if (visible > 0.5f) " ▍" else "  "
+                } else {
+                    ""
+                }
                 Text(
-                    text,
+                    text + cursor,
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.bodyLarge,
                 )
+                if (!busy && text.isNotBlank()) {
+                    Spacer(Modifier.size(6.dp))
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        onClick = onSpeak,
+                    ) {
+                        Icon(
+                            Icons.Filled.VolumeUp,
+                            contentDescription = "Read aloud",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(6.dp).size(16.dp),
+                        )
+                    }
+                }
             }
         }
     }
@@ -717,7 +864,9 @@ private fun GhostButton(label: String, icon: ImageVector, onClick: () -> Unit, m
 private fun FloatingInputBar(value: String, onValueChange: (String) -> Unit, onSend: () -> Unit, enabled: Boolean) {
     Surface(
         color = MaterialTheme.colorScheme.background,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .imePadding(),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
