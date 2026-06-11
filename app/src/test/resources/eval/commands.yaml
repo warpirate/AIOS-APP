@@ -1,5 +1,5 @@
 # Mitra eval starter set — Phase 0
-# 50 commands: 6 chit-chat negatives + 44 tool cases covering all 13 V1 tools.
+# 54 commands: 6 chit-chat negatives + 48 tool cases covering all 14 V1 tools.
 # Format: id, utterance, gold (ordered list of tool calls), language, optional multi_step flag.
 
 - id: "0001"
@@ -339,4 +339,32 @@
 - id: "9006"
   utterance: "thanks"
   gold: []
+  language: en
+
+- id: "0051"
+  utterance: "what's mom's number"
+  gold:
+    - tool: query_contacts
+      args: { name: "mom" }
+  language: en
+
+- id: "0052"
+  utterance: "find priya"
+  gold:
+    - tool: query_contacts
+      args: { name: "priya" }
+  language: en
+
+- id: "0053"
+  utterance: "show raj's contact"
+  gold:
+    - tool: query_contacts
+      args: { name: "raj" }
+  language: en
+
+- id: "0054"
+  utterance: "where's dad's phone"
+  gold:
+    - tool: query_contacts
+      args: { name: "dad" }
   language: en

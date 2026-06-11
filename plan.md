@@ -97,7 +97,7 @@ Build the V1 tool list. Each tool is one PR, fully tested, with a clear "Use thi
 - [ ] `get_active_network`
 
 **Contacts:**
-- [ ] `query_contacts(name)` — resolves names and relations to phone numbers
+- [x] `query_contacts(name)` — three-tier fuzzy match (exact / starts-with / contains), all phones with type labels, capped at 5 results. Shipped 2026-06-11.
 
 Each tool ships with: implementation + side-effect classification + a "Use this when …" `@Tool` description (so the LLM calls it) + an `IntentParser` fallback pattern + a unit test. (No fine-tuning dataset in V1 — E2B does zero-shot tool-calling.)
 
@@ -233,6 +233,6 @@ Updated 2026-06-05. M0 skeleton landed (Gemma 4 E2B + LiteRT-LM CPU + 5 tools en
 5. **CI + lint (M0 close-outs):** wire GitHub Actions `build + lint + unit test on push`. Add a minimal ktlint config; defer the custom privacy-invariant rules until M2 audit log is consumed by UI.
 6. **Pin SDK / NDK / AGP** + commit `.tool-versions`.
 7. **Hardware truth test** — still owed on a real SD7 Gen 2 / 6 GB device. Cold-start, warm p50/p95, sustained 10-call thermal point. Park results in `docs/research/`.
-8. **Add `query_contacts`** (ContentResolver, read-only) — unblocks `make_call` / `send_sms` arg resolution.
+8. ~~**Add `query_contacts`** (ContentResolver, read-only) — unblocks `make_call` / `send_sms` arg resolution.~~ Shipped 2026-06-11; see [docs/superpowers/specs/2026-06-11-query-contacts-design.md](docs/superpowers/specs/2026-06-11-query-contacts-design.md).
 9. **Sustainability bootstrap** — stranger-runnable CONTRIBUTING flow + NLnet NGI Zero application before next even-month deadline. (R-008)
 10. **Pick a public name** before the first public commit if `Mitra` isn't it.
