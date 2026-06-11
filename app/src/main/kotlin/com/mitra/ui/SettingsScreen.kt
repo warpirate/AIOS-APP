@@ -1,7 +1,6 @@
 package com.mitra.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -16,17 +15,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.BrightnessMedium
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,7 +38,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -52,33 +46,44 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.mitra.permissions.Permission
-import com.mitra.permissions.PermissionStatus
 import com.mitra.permissions.Permissions
 import com.mitra.prefs.UserPrefs
 
+/**
+ * Minimal Settings page. Three rows: a single entry point into the permissions review flow,
+ * the user's name, and the TTS toggle. Everything else (Activity, About, Confirmations) is
+ * deferred until the screens those rows would link to actually exist.
+ *
+ * Permissions intentionally live one screen deeper so the main Settings page stays calm and
+ * answers a small set of jobs (change a preference, jump into the permissions walk-through).
+ */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onViewPermissions: () -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var snapshot by remember { mutableStateOf(Permissions.snapshot(context)) }
     var ttsEnabled by remember { mutableStateOf(UserPrefs.ttsEnabled(context)) }
 
+    // System back returns to Chat, not out of app.
+    BackHandler(onBack = onBack)
+
     DisposableEffect(lifecycle) {
         val observer =
             LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_RESUME) snapshot = Permissions.snapshot(context)
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    snapshot = Permissions.snapshot(context)
+                    ttsEnabled = UserPrefs.ttsEnabled(context)
+                }
             }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
 
-    val bluetoothLauncher =
-        rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestPermission(),
-        ) { snapshot = Permissions.snapshot(context) }
+    val grantedCount = snapshot.statuses.count { it.granted }
+    val totalCount = snapshot.statuses.size
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -96,58 +101,71 @@ fun SettingsScreen(
                     fontWeight = FontWeight.SemiBold,
                 )
             }
+
             LazyColumn(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
+
+                // Section: Permissions (single entry row)
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            "Access",
-                            fontSize = 30.sp,
+                            "Permissions",
+                            fontSize = 28.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            "What Mitra can do on your phone. Tap any row to change it on the system page.",
+                            "What Mitra can do on your phone.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
-                items(snapshot.statuses) { status ->
-                    PermissionRow(
-                        status = status,
-                        onTap = {
-                            val runtime = Permissions.runtimePermission(status.permission)
-                            if (runtime != null && !status.granted) {
-                                bluetoothLauncher.launch(runtime)
-                            } else {
-                                Permissions.launchGrant(context, status.permission)
-                            }
-                        },
+                item {
+                    NavRow(
+                        icon = Icons.Filled.Lock,
+                        title = "View all permissions",
+                        subtitle = "Grant or review what you've already allowed",
+                        trailingText = "$grantedCount of $totalCount granted",
+                        onTap = onViewPermissions,
                     )
                 }
+
+                // Section: Preferences
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            "Voice",
-                            fontSize = 30.sp,
+                            "Preferences",
+                            fontSize = 28.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            "Optional. Mitra can read replies aloud using your phone's built-in voice.",
+                            "Your details, your defaults.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                }
+                item {
+                    NavRow(
+                        icon = Icons.Filled.Person,
+                        title = "Your name",
+                        subtitle = "Used in the greeting and welcome line",
+                        trailingText = UserPrefs.name(context).ifBlank { "Not set" },
+                        // Name editing UI lands in a future PR; tap currently no-ops on the
+                        // value column but keeps the visual affordance consistent with the
+                        // other rows so the layout stays calm.
+                        onTap = {},
+                    )
                 }
                 item {
                     ToggleRow(
                         icon = Icons.Filled.VolumeUp,
                         title = "Read replies aloud",
-                        subtitle = "Adds a speaker button next to each reply.",
+                        subtitle = "Adds a speaker on each reply",
                         checked = ttsEnabled,
                         onCheckedChange = {
                             ttsEnabled = it
@@ -155,7 +173,82 @@ fun SettingsScreen(
                         },
                     )
                 }
+
+                // Footer pin
+                item {
+                    Spacer(Modifier.size(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Text(
+                            buildPrivacyPin(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
+        }
+    }
+}
+
+private fun buildPrivacyPin(): String = "Runs on this phone. Nothing leaves the device."
+
+@Composable
+private fun NavRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    trailingText: String,
+    onTap: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                trailingText,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Icon(
+                Icons.Filled.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -198,87 +291,3 @@ private fun ToggleRow(
         }
     }
 }
-
-@Composable
-private fun PermissionRow(status: PermissionStatus, onTap: () -> Unit) {
-    val accent = if (status.granted) Color(0xFF8FB97D) else MaterialTheme.colorScheme.onSurfaceVariant
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    iconFor(status.permission),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(titleFor(status.permission), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(
-                    whyFor(status.permission),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.size(8.dp))
-            if (status.granted) {
-                Surface(
-                    color = accent.copy(alpha = 0.18f),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(Icons.Filled.Check, contentDescription = null, tint = accent, modifier = Modifier.size(12.dp))
-                        Text("On", style = MaterialTheme.typography.labelSmall, color = accent, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            } else {
-                Icon(Icons.Filled.ChevronRight, contentDescription = "Grant", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
-
-private fun iconFor(p: Permission): ImageVector =
-    when (p) {
-        Permission.WRITE_SETTINGS -> Icons.Filled.BrightnessMedium
-        Permission.NOTIFICATION_POLICY -> Icons.Filled.NotificationsOff
-        Permission.BLUETOOTH_CONNECT -> Icons.Filled.Bluetooth
-        Permission.READ_CONTACTS -> Icons.Filled.Contacts
-    }
-
-private fun titleFor(p: Permission): String =
-    when (p) {
-        Permission.WRITE_SETTINGS -> "System settings"
-        Permission.NOTIFICATION_POLICY -> "Do Not Disturb"
-        Permission.BLUETOOTH_CONNECT -> "Bluetooth"
-        Permission.READ_CONTACTS -> "Contacts"
-    }
-
-private fun whyFor(p: Permission): String =
-    when (p) {
-        Permission.WRITE_SETTINGS -> "Brightness, auto-rotate, screen timeout"
-        Permission.NOTIFICATION_POLICY -> "Turn Do Not Disturb on or off, silent mode"
-        Permission.BLUETOOTH_CONNECT -> "Switch Bluetooth on and off"
-        Permission.READ_CONTACTS -> "Look up phone numbers by name"
-    }

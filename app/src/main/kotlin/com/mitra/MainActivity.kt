@@ -27,6 +27,7 @@ import com.mitra.ui.ChatScreen
 import com.mitra.ui.DownloadScreen
 import com.mitra.ui.ErrorScreen
 import com.mitra.ui.LoadingBrainScreen
+import com.mitra.ui.PermissionsEntryMode
 import com.mitra.ui.PermissionsScreen
 import com.mitra.ui.SettingsScreen
 import com.mitra.ui.WelcomeScreen
@@ -37,7 +38,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-private enum class Phase { BOOT, WELCOME, DOWNLOAD, LOADING, PERMISSIONS, CHAT, SETTINGS, ERROR }
+private enum class Phase { BOOT, WELCOME, DOWNLOAD, LOADING, PERMISSIONS, CHAT, SETTINGS, PERMISSIONS_REVIEW, ERROR }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -166,7 +167,15 @@ private fun AppRoot(
                 buildRuntime = { onChunk -> buildRuntime(brain, onChunk) },
                 onOpenSettings = { phase = Phase.SETTINGS },
             )
-        Phase.SETTINGS -> SettingsScreen(onBack = { phase = Phase.CHAT })
+        Phase.SETTINGS ->
+            SettingsScreen(
+                onBack = { phase = Phase.CHAT },
+                onViewPermissions = { phase = Phase.PERMISSIONS_REVIEW },
+            )
+        Phase.PERMISSIONS_REVIEW ->
+            PermissionsScreen(
+                mode = PermissionsEntryMode.Review(onBack = { phase = Phase.SETTINGS }),
+            )
         Phase.ERROR ->
             ErrorScreen(
                 message = errorMsg,
