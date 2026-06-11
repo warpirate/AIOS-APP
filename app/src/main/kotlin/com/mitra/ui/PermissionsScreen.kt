@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BrightnessMedium
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.Icon
@@ -56,10 +57,14 @@ fun PermissionsScreen(
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var snapshot by remember { mutableStateOf(Permissions.snapshot(context)) }
-    var currentIdx by remember { mutableIntStateOf(snapshot.firstUngrantedIndex()) }
+    // Onboarding walks only first-run-relevant permissions (Permission.isOnboarding = true).
+    // Reactive-grant permissions (READ_CONTACTS) are deliberately skipped here; the tool that
+    // needs them bounces to app-permissions on first use.
+    val onboardingStatuses = snapshot.onboardingStatuses
+    var currentIdx by remember { mutableIntStateOf(onboardingStatuses.indexOfFirst { !it.granted }) }
 
     LaunchedEffect(Unit) {
-        if (snapshot.allGranted) onContinue()
+        if (snapshot.onboardingAllGranted) onContinue()
     }
 
     DisposableEffect(lifecycle) {
@@ -67,10 +72,11 @@ fun PermissionsScreen(
             LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_RESUME) {
                     snapshot = Permissions.snapshot(context)
-                    if (snapshot.allGranted) {
+                    val refreshed = snapshot.onboardingStatuses
+                    if (snapshot.onboardingAllGranted) {
                         onContinue()
-                    } else if (currentIdx in snapshot.statuses.indices && snapshot.statuses[currentIdx].granted) {
-                        currentIdx = snapshot.firstUngrantedIndex()
+                    } else if (currentIdx in refreshed.indices && refreshed[currentIdx].granted) {
+                        currentIdx = refreshed.indexOfFirst { !it.granted }
                     }
                 }
             }
@@ -83,17 +89,18 @@ fun PermissionsScreen(
             contract = ActivityResultContracts.RequestPermission(),
         ) {
             snapshot = Permissions.snapshot(context)
-            if (snapshot.allGranted) onContinue() else currentIdx = snapshot.firstUngrantedIndex()
+            val refreshed = snapshot.onboardingStatuses
+            if (snapshot.onboardingAllGranted) onContinue() else currentIdx = refreshed.indexOfFirst { !it.granted }
         }
 
-    if (currentIdx !in snapshot.statuses.indices) {
+    if (currentIdx !in onboardingStatuses.indices) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {}
         return
     }
 
-    val current = snapshot.statuses[currentIdx].permission
-    val totalUngranted = snapshot.statuses.count { !it.granted }
-    val stepInUngranted = snapshot.statuses.take(currentIdx + 1).count { !it.granted }
+    val current = onboardingStatuses[currentIdx].permission
+    val totalUngranted = onboardingStatuses.count { !it.granted }
+    val stepInUngranted = onboardingStatuses.take(currentIdx + 1).count { !it.granted }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -136,7 +143,7 @@ fun PermissionsScreen(
             Spacer(Modifier.height(8.dp))
             GhostActionPill(label = "Not now") {
                 val next =
-                    snapshot.statuses
+                    onboardingStatuses
                         .drop(currentIdx + 1)
                         .indexOfFirst { !it.granted }
                         .let { if (it >= 0) currentIdx + 1 + it else -1 }
@@ -224,14 +231,12 @@ private fun GhostActionPill(label: String, onClick: () -> Unit) {
     }
 }
 
-private fun PermissionSnapshot.firstUngrantedIndex(): Int =
-    statuses.indexOfFirst { !it.granted }
-
 private fun iconFor(p: Permission): ImageVector =
     when (p) {
         Permission.WRITE_SETTINGS -> Icons.Filled.BrightnessMedium
         Permission.NOTIFICATION_POLICY -> Icons.Filled.NotificationsOff
         Permission.BLUETOOTH_CONNECT -> Icons.Filled.Bluetooth
+        Permission.READ_CONTACTS -> Icons.Filled.Contacts
     }
 
 private fun titleFor(p: Permission): String =
@@ -239,6 +244,7 @@ private fun titleFor(p: Permission): String =
         Permission.WRITE_SETTINGS -> "Change system settings"
         Permission.NOTIFICATION_POLICY -> "Control Do Not Disturb"
         Permission.BLUETOOTH_CONNECT -> "Switch Bluetooth on and off"
+        Permission.READ_CONTACTS -> "Find contacts"
     }
 
 private fun whyFor(p: Permission): String =
@@ -249,6 +255,8 @@ private fun whyFor(p: Permission): String =
             "Mitra turns Do Not Disturb on or off, and switches the ringer to silent."
         Permission.BLUETOOTH_CONNECT ->
             "Mitra switches Bluetooth on and off directly. Without this, Mitra opens the Bluetooth page instead."
+        Permission.READ_CONTACTS ->
+            "Mitra looks up phone numbers when you ask. Without this, name lookups won't work."
     }
 
 @Composable
@@ -258,6 +266,9 @@ private fun PermissionPreview(perm: Permission) {
             Permission.WRITE_SETTINGS -> com.mitra.R.raw.perm_settings
             Permission.NOTIFICATION_POLICY -> com.mitra.R.raw.perm_dnd
             Permission.BLUETOOTH_CONNECT -> com.mitra.R.raw.perm_bluetooth
+            // No preview video for Contacts. Tool grants reactively when first used; onboarding
+            // doesn't surface the Contacts row, so this branch is defensive only.
+            Permission.READ_CONTACTS -> return
         }
     Surface(
         color = MaterialTheme.colorScheme.surface,

@@ -22,11 +22,18 @@ import android.provider.Settings
  */
 enum class Permission(
     val key: String,
+    /**
+     * Whether this permission appears in the first-run onboarding flow. False = the tool that
+     * needs it grants reactively (bounce to app-permissions on first use). Useful when the
+     * permission isn't critical to bootstrapping and dragging the user through it on launch
+     * would feel scary (approachability principle).
+     */
+    val isOnboarding: Boolean = true,
 ) {
     WRITE_SETTINGS("write_settings"),
     NOTIFICATION_POLICY("notification_policy"),
     BLUETOOTH_CONNECT("bluetooth_connect"),
-    READ_CONTACTS("read_contacts"),
+    READ_CONTACTS("read_contacts", isOnboarding = false),
 }
 
 data class PermissionStatus(
@@ -39,6 +46,10 @@ data class PermissionSnapshot(
 ) {
     val allGranted: Boolean get() = statuses.all { it.granted }
     val anyMissing: Boolean get() = statuses.any { !it.granted }
+
+    /** Subset shown during the onboarding sequence — excludes permissions tools grant lazily. */
+    val onboardingStatuses: List<PermissionStatus> get() = statuses.filter { it.permission.isOnboarding }
+    val onboardingAllGranted: Boolean get() = onboardingStatuses.all { it.granted }
 }
 
 object Permissions {

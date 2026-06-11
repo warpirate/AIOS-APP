@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.VolumeUp
@@ -263,6 +264,7 @@ private fun iconFor(p: Permission): ImageVector =
         Permission.WRITE_SETTINGS -> Icons.Filled.BrightnessMedium
         Permission.NOTIFICATION_POLICY -> Icons.Filled.NotificationsOff
         Permission.BLUETOOTH_CONNECT -> Icons.Filled.Bluetooth
+        Permission.READ_CONTACTS -> Icons.Filled.Contacts
     }
 
 private fun titleFor(p: Permission): String =
@@ -270,6 +272,7 @@ private fun titleFor(p: Permission): String =
         Permission.WRITE_SETTINGS -> "System settings"
         Permission.NOTIFICATION_POLICY -> "Do Not Disturb"
         Permission.BLUETOOTH_CONNECT -> "Bluetooth"
+        Permission.READ_CONTACTS -> "Contacts"
     }
 
 private fun whyFor(p: Permission): String =
@@ -277,4 +280,5 @@ private fun whyFor(p: Permission): String =
         Permission.WRITE_SETTINGS -> "Brightness, auto-rotate, screen timeout"
         Permission.NOTIFICATION_POLICY -> "Turn Do Not Disturb on or off, silent mode"
         Permission.BLUETOOTH_CONNECT -> "Switch Bluetooth on and off"
+        Permission.READ_CONTACTS -> "Look up phone numbers by name"
     }
