@@ -1,0 +1,8 @@
+# Toolchain pins for the Mitra build. Consumed by asdf / mise / proto / version-fox.
+# CI uses these too (via setup-java in .github/workflows/ci.yml — keep the Java version aligned).
+#
+# Why pin? Build reproducibility. AGP 8.5 requires JDK 17. Kotlin 2.2 + AGP 8.5 requires Gradle 8.9+.
+# Bumping any one of these without bumping the others tends to break the Compose compiler plugin.
+java 17.0.13
+gradle 8.9
+kotlin 2.2.21

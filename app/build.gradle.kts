@@ -7,6 +7,10 @@ plugins {
 android {
     namespace = "com.mitra"
     compileSdk = 35
+    // No direct NDK use today (LiteRT-LM ships native libs via AAR), but pinning prevents AGP from
+    // picking whatever NDK is installed on the developer / CI box. Keep in sync with .tool-versions
+    // when bumping.
+    ndkVersion = "26.1.10909125"
 
     defaultConfig {
         applicationId = "com.mitra"
