@@ -97,13 +97,13 @@ fun SettingsScreen(
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            "Permissions",
+                            "Access",
                             fontSize = 30.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            "What Mitra can do on your phone. Tap any item to change it in system settings.",
+                            "What Mitra can do on your phone. Tap any row to change it on the system page.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -192,6 +192,6 @@ private fun titleFor(p: Permission): String = when (p) {
 
 private fun whyFor(p: Permission): String = when (p) {
     Permission.WRITE_SETTINGS -> "Brightness, auto-rotate, screen timeout"
-    Permission.NOTIFICATION_POLICY -> "Turn DND on or off, silent mode"
-    Permission.BLUETOOTH_CONNECT -> "Toggle Bluetooth on Android 12+"
+    Permission.NOTIFICATION_POLICY -> "Turn Do Not Disturb on or off, silent mode"
+    Permission.BLUETOOTH_CONNECT -> "Switch Bluetooth on and off"
 }

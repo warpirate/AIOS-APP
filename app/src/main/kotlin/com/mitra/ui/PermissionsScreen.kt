@@ -145,7 +145,7 @@ fun PermissionsScreen(
                 else Permissions.launchGrant(context, current)
             }
             Spacer(Modifier.height(8.dp))
-            GhostActionPill(label = "Skip for now") {
+            GhostActionPill(label = "Not now") {
                 val next = snapshot.statuses.drop(currentIdx + 1)
                     .indexOfFirst { !it.granted }
                     .let { if (it >= 0) currentIdx + 1 + it else -1 }
@@ -245,16 +245,16 @@ private fun iconFor(p: Permission): ImageVector = when (p) {
 private fun titleFor(p: Permission): String = when (p) {
     Permission.WRITE_SETTINGS -> "Change system settings"
     Permission.NOTIFICATION_POLICY -> "Control Do Not Disturb"
-    Permission.BLUETOOTH_CONNECT -> "Connect to Bluetooth"
+    Permission.BLUETOOTH_CONNECT -> "Switch Bluetooth on and off"
 }
 
 private fun whyFor(p: Permission): String = when (p) {
     Permission.WRITE_SETTINGS ->
-        "So I can adjust brightness, auto-rotate, and screen timeout when you ask."
+        "Mitra adjusts brightness, auto-rotate, and screen timeout when you ask."
     Permission.NOTIFICATION_POLICY ->
-        "So I can turn Do Not Disturb on or off, and switch the ringer to silent."
+        "Mitra turns Do Not Disturb on or off, and switches the ringer to silent."
     Permission.BLUETOOTH_CONNECT ->
-        "So I can turn Bluetooth on and off directly. Without this, I'll just open the Bluetooth page for you."
+        "Mitra switches Bluetooth on and off directly. Without this, Mitra opens the Bluetooth page instead."
 }
 
 @Composable

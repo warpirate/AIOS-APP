@@ -125,14 +125,14 @@ fun WelcomeScreen(onStart: () -> Unit) {
             )
             Spacer(Modifier.height(20.dp))
             Text(
-                "Talk to me. I'll set alarms, dim the screen, open apps, and more — all on this device.",
+                "Tell Mitra what to do — set alarms, dim the screen, open apps, and more. All on this device.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 24.sp,
             )
             Spacer(Modifier.height(28.dp))
             Text(
-                "What should I call you?",
+                "What's your name?",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -287,7 +287,7 @@ fun DownloadScreen(
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Downloading the model so I can work without the internet.",
+                "Downloading the model. Mitra runs without the internet after this.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -418,7 +418,7 @@ fun ErrorScreen(message: String, onRetry: () -> Unit, onSkip: () -> Unit) {
             Spacer(Modifier.weight(0.3f))
             PrimaryPill(label = "Try again", onClick = onRetry)
             Spacer(Modifier.height(12.dp))
-            SecondaryPill(label = "Continue without it (basic mode)", icon = Icons.Filled.Refresh, onClick = onSkip)
+            SecondaryPill(label = "Continue in basic mode", icon = Icons.Filled.Refresh, onClick = onSkip)
         }
     }
 }
