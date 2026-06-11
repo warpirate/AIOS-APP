@@ -126,6 +126,18 @@ class LiteRtBrain(
         fun set_bluetooth(
             @ToolParam(description = "true to turn Bluetooth ON, false to turn OFF") on: Boolean,
         ): Map<String, Any> = mapOf("ok" to true)
+
+        @Tool(
+            description = "Use this ONLY when the user explicitly says 'call X', 'dial X', 'phone X', 'ring X' where X is a contact name OR a phone number (e.g. 'call mom', 'call 9876543210', 'dial Priya'). Pass the target EXACTLY as the user wrote it. Do NOT call this for 'open the phone app', 'open dialer', or any non-call request — those use open_app or open_settings. Do NOT call this for general chat that happens to contain the word 'call'.",
+        )
+        fun make_call(
+            @ToolParam(
+                description = "the contact name the user said, byte-for-byte. Use this when the user gave a name like 'mom' or 'Priya'. Leave empty when the user gave only digits.",
+            ) name: String,
+            @ToolParam(
+                description = "the phone number the user said, digits only or with + and spaces. Use this when the user gave digits like '9876543210' or '+91 98765 43210'. Leave empty when the user gave a name.",
+            ) number: String,
+        ): Map<String, Any> = mapOf("ok" to true)
         // Real execution is dispatched by AgentLoop -> ToolRegistry, not here.
     }
 
@@ -153,6 +165,14 @@ class LiteRtBrain(
                         - Fragments and bullet lists are fine.
 
                         TOOLS — call a tool only when the user's request matches its "Use this WHEN" boundary. Never call open_url for learn / teach / explain / define / translate questions; answer them with content.
+
+                        TOOL ARGS — when emitting a tool call, COPY proper-noun arguments (contact names, app names, URLs) BYTE-FOR-BYTE from the user's most recent message. Do NOT respell, abbreviate, "fix", or paraphrase them. "blanta" stays "blanta". "Priya Sharma" stays "Priya Sharma". The tool may fail on a misspelling and that is correct — the user will retype it.
+
+                        INDIAN ENGLISH FILLERS — "naa", "na", "haan", "haina", "kya", "yaar", "matlab", "okay na", "right?", "no?", "right na" are conversational fillers, NOT names. Never treat them as a contact name, app name, or any tool argument. Strip them before resolving intent.
+
+                        NEVER NARRATE FAKE ACTIONS. Do not write "You have found X", "Done", "Called X", "Opened X", "Set X" unless you actually emitted the matching tool call this turn. If you did not call the tool, say what is needed (e.g. "I cannot call yet — Mitra needs the call_phone permission" or "Try saying 'call Blanta' with the explicit verb"). Honest > confident-sounding.
+
+                        CALL / SMS — "call X" means dial X via the make_call tool. "Text X" / "message X" / "send X a message" will use send_sms when it ships. Both treat X as either a contact name OR a phone number; pass it through unchanged to the tool's name OR number argument as you see it.
                         """.trimIndent(),
                     ),
                 samplerConfig = SamplerConfig(temperature = 0.3, topK = 20, topP = 0.95),

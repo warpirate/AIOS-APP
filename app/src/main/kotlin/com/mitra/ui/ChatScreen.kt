@@ -48,7 +48,9 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RingVolume
@@ -410,6 +412,12 @@ private fun actionDetail(call: ToolCall): String =
                 else -> "to $s sec"
             }
         }
+        "query_contacts" -> (call.args["name"] as? String).orEmpty()
+        "make_call" -> {
+            val name = (call.args["name"] as? String).orEmpty().ifBlank { null }
+            val number = (call.args["number"] as? String).orEmpty().ifBlank { null }
+            name ?: number ?: ""
+        }
         // Title already speaks for these — no detail needed.
         "toggle_flashlight", "set_dnd", "set_auto_rotate", "set_bluetooth" -> ""
         else -> ""
@@ -430,6 +438,8 @@ private fun toolIcon(name: String): ImageVector =
         "set_auto_rotate" -> Icons.Filled.PhoneAndroid
         "set_screen_timeout" -> Icons.Filled.DarkMode
         "set_bluetooth" -> Icons.Filled.Bluetooth
+        "query_contacts" -> Icons.Filled.Search
+        "make_call" -> Icons.Filled.Phone
         else -> Icons.Outlined.Bolt
     }
 

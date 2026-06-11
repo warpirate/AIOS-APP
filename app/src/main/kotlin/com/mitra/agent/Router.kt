@@ -42,6 +42,19 @@ class IntentParser : Router {
             return ToolCall("query_contacts", mapOf("name" to it.groupValues[1].trim()))
         }
 
+        // Call / dial — "call mom", "dial 9876543210", "phone priya". The target is everything
+        // after the verb minus trailing Indian-English fillers ("naa", "na", "haan", "please",
+        // "pls", "yaar"). If the cleaned target parses as digits → number; else → name.
+        Regex("""(?:call|dial|phone|ring)\s+(.+)""").find(t)?.let {
+            val target = stripCallFillers(it.groupValues[1])
+            if (target.isBlank()) return@let
+            return if (looksLikeNumber(target)) {
+                ToolCall("make_call", mapOf("number" to target))
+            } else {
+                ToolCall("make_call", mapOf("name" to target))
+            }
+        }
+
         // Real-API tools BEFORE the panel resolver. Each requires an explicit on/off verb so a
         // bare noun ("bluetooth?", "dnd") still falls through to the panel resolver below.
         explicitToggle(t, listOf("dnd", "do not disturb", "zen mode"))?.let {
@@ -202,6 +215,40 @@ class IntentParser : Router {
                 "accessibility" to "accessibility",
             )
         return keywords.firstOrNull { (kw, _) -> kw in t }?.second
+    }
+
+    /**
+     * Strip trailing Indian-English fillers and politeness from a call target so "call blanta naa"
+     * resolves to "blanta", not "blanta naa". List sourced from voice.md vocabulary.
+     */
+    private fun stripCallFillers(raw: String): String {
+        val fillers =
+            listOf(
+                "naa", "na", "haan", "haina", "kya", "yaar", "matlab", "ji",
+                "please", "pls", "plz", "kindly", "now", "right now",
+                "right?", "no?", "ok?", "okay?", "okay na", "right na",
+            )
+        var s = raw.trim().trimEnd('.', '!', '?', ',')
+        // Repeatedly strip the rightmost filler word until none remain.
+        var changed = true
+        while (changed) {
+            changed = false
+            for (f in fillers) {
+                val pat = Regex("""\s+${Regex.escape(f)}$""")
+                if (pat.containsMatchIn(s)) {
+                    s = pat.replace(s, "")
+                    changed = true
+                }
+            }
+        }
+        return s.trim()
+    }
+
+    /** True if the string is a plausible phone number (digits + optional + - spaces, at least 5 digits). */
+    private fun looksLikeNumber(s: String): Boolean {
+        val digits = s.count { it.isDigit() }
+        if (digits < 5) return false
+        return s.all { it.isDigit() || it == '+' || it == '-' || it == ' ' || it == '(' || it == ')' }
     }
 
     /** "7:30", "7 30", "6am", "18:00", "7" -> (hour, minute) in 24-hour form. */

@@ -17,6 +17,7 @@ object ToolRegistry {
             OpenApp(context),
             OpenSettings(context),
             QueryContacts(context),
+            MakeCall(context),
             SetMediaVolume(context),
             SetBrightness(context),
             SetDnd(context),
