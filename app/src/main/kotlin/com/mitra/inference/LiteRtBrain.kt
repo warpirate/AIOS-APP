@@ -54,9 +54,9 @@ class LiteRtBrain(modelPath: String, cacheDir: String) {
             @ToolParam(description = "total duration in seconds") seconds: Int,
         ): Map<String, Any> = mapOf("ok" to true)
 
-        @Tool(description = "Use this when the user wants to open a website, web page, app link, or URL.")
+        @Tool(description = "Use this ONLY when the user explicitly says open / visit / go to a specific website, names a domain like youtube.com or github, or pastes a URL. Do NOT use this for learning, teaching, explaining, defining, summarising, translating, or any general-knowledge or content question — those are answered directly in chat, not by opening a search link.")
         fun open_url(
-            @ToolParam(description = "the web address / URL to open") url: String,
+            @ToolParam(description = "the exact web address — only when the user named a site or pasted a URL") url: String,
         ): Map<String, Any> = mapOf("ok" to true)
 
         @Tool(description = "Use this ONLY when the user explicitly says open / launch / start a named app like Spotify, Camera, WhatsApp. Do NOT use this for hardware toggles, system settings, Bluetooth, Wi-Fi, brightness, alarms, or single-word nouns — those have their own tools or none at all.")
@@ -109,15 +109,60 @@ class LiteRtBrain(modelPath: String, cacheDir: String) {
     private val conversation = engine.createConversation(
         ConversationConfig(
             systemInstruction = Contents.of(
-                "You are Mitra, a calm on-device phone assistant. When the user's request matches a tool, " +
-                    "call that tool. Otherwise answer directly in one short, friendly sentence. " +
-                    "Do not explain your reasoning.",
+                """
+You are Mitra, an on-device phone assistant. Answer like a smart friend who texts.
+
+LENGTH:
+- Tool confirmation: 1 sentence.
+- Teach / explain / define / translate / list: give a useful multi-sentence answer with examples or a short list. Never truncate to one line. Never punt with "what would you like to know?".
+- Small talk: 1-2 sentences.
+
+VOICE — answer the question directly, never talk about yourself.
+- WRONG: "I can", "Mitra can", "I am here to help", "Let me", "What would you like to know?".
+- RIGHT: state the answer in second person.
+- No greetings, no apologies, no exclamation marks, no em dashes, no emoji.
+- No filler ("just", "really", "basically", "perhaps", "in order to").
+- No "In conclusion", "Moreover", "Furthermore".
+- No buzzwords (leverage, utilize, robust, seamless, comprehensive, delve, holistic, actionable, impactful, foster, harness, embark, vibrant, thriving).
+- Use "is" / "has", not "serves as" / "features" / "boasts".
+- Fragments and bullet lists are fine.
+
+TOOLS — call a tool only when the user's request matches its "Use this WHEN" boundary. Never call open_url for learn / teach / explain / define / translate questions; answer them with content.
+                """.trimIndent(),
             ),
             samplerConfig = SamplerConfig(temperature = 0.3, topK = 20, topP = 0.95),
             tools = listOf(tool(PhoneTools())),
             automaticToolCalling = false,
         ),
     )
+
+    /**
+     * Silent background warmup. Runs a tiny throwaway inference to warm the engine: pages the model
+     * into RAM, compiles XNNPACK delegate kernels, primes CPU caches, processes the system prompt
+     * (which is the largest first-token cost on cold start). The real chat conversation is NOT
+     * touched; the warmup uses a separate Conversation that's closed at the end so it leaves no
+     * history. Call once from a background coroutine right after the brain loads.
+     */
+    suspend fun warmup() {
+        val warm = engine.createConversation(
+            ConversationConfig(
+                systemInstruction = Contents.of(""),
+                samplerConfig = SamplerConfig(temperature = 0.1, topK = 1, topP = 1.0),
+            ),
+        )
+        try {
+            // Pull one or two tokens then stop; that's enough to compile kernels + warm CPU.
+            var tokens = 0
+            warm.sendMessageAsync("hi").collect { _ ->
+                tokens++
+                if (tokens >= 2) return@collect
+            }
+        } catch (_: Throwable) {
+            // Warmup is best-effort. If it fails, the first real message just pays the cold cost.
+        } finally {
+            runCatching { warm.close() }
+        }
+    }
 
     /** Streams the reply; the tool call (if any) is attached as soon as the runtime surfaces it. */
     fun chatStream(userText: String): Flow<BrainTurn> = flow {

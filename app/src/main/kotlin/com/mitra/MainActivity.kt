@@ -32,7 +32,9 @@ import com.mitra.ui.WelcomeScreen
 import com.mitra.ui.theme.MitraTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.runtime.rememberCoroutineScope
 import java.io.File
 
 private enum class Phase { BOOT, WELCOME, DOWNLOAD, LOADING, PERMISSIONS, CHAT, SETTINGS, ERROR }
@@ -85,6 +87,7 @@ private fun AppRoot(
     buildRuntime: (LiteRtBrain?, (String) -> Unit) -> AgentRuntime,
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    val warmupScope = rememberCoroutineScope()
     var phase by remember { mutableStateOf(Phase.BOOT) }
     var brain by remember { mutableStateOf<LiteRtBrain?>(null) }
 
@@ -119,6 +122,14 @@ private fun AppRoot(
         if (phase == Phase.LOADING) {
             brain = withContext(Dispatchers.IO) {
                 try { LiteRtBrain(modelFile.absolutePath, cacheDir) } catch (t: Throwable) { null }
+            }
+            // Silent background warmup: pages model into RAM, compiles kernels, primes CPU caches.
+            // Runs while the user is on Permissions or Chat empty state. By the time they send their
+            // first message, the engine is hot. No loading-screen extension, no user-facing message.
+            brain?.let { b ->
+                warmupScope.launch(Dispatchers.IO) {
+                    runCatching { b.warmup() }
+                }
             }
             phase = if (Onboarding.isComplete(ctx)) Phase.CHAT else Phase.PERMISSIONS
         }
