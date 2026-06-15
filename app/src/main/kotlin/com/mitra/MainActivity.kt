@@ -3,6 +3,8 @@ package com.mitra
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -11,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import com.mitra.agent.AgentRuntime
 import com.mitra.agent.IntentParser
 import com.mitra.agent.IntentParserPlanner
@@ -161,21 +164,32 @@ private fun AppRoot(
                     phase = Phase.CHAT
                 },
             )
-        Phase.CHAT ->
-            ChatScreen(
-                brainReady = brain != null,
-                buildRuntime = { onChunk -> buildRuntime(brain, onChunk) },
-                onOpenSettings = { phase = Phase.SETTINGS },
-            )
-        Phase.SETTINGS ->
-            SettingsScreen(
-                onBack = { phase = Phase.CHAT },
-                onViewPermissions = { phase = Phase.PERMISSIONS_REVIEW },
-            )
-        Phase.PERMISSIONS_REVIEW ->
-            PermissionsScreen(
-                mode = PermissionsEntryMode.Review(onBack = { phase = Phase.SETTINGS }),
-            )
+        // Keep ChatScreen mounted across Settings / PermissionsReview so chat history, in-flight
+        // brain streams, and the AgentRuntime coroutine scope survive nav. Earlier versions swapped
+        // ChatScreen out of composition when moving to Settings, which (a) wiped the chat list
+        // (private remember-scoped state) and (b) cancelled any in-flight conversation.sendMessageAsync
+        // mid-stream — LiteRT-LM did not always recover, surfacing as LiteRtLmJniException on the
+        // next turn. Settings / PermissionsReview now render as a full-bleed overlay on top.
+        Phase.CHAT, Phase.SETTINGS, Phase.PERMISSIONS_REVIEW ->
+            Box(modifier = Modifier.fillMaxSize()) {
+                ChatScreen(
+                    brainReady = brain != null,
+                    buildRuntime = { onChunk -> buildRuntime(brain, onChunk) },
+                    onOpenSettings = { phase = Phase.SETTINGS },
+                )
+                when (phase) {
+                    Phase.SETTINGS ->
+                        SettingsScreen(
+                            onBack = { phase = Phase.CHAT },
+                            onViewPermissions = { phase = Phase.PERMISSIONS_REVIEW },
+                        )
+                    Phase.PERMISSIONS_REVIEW ->
+                        PermissionsScreen(
+                            mode = PermissionsEntryMode.Review(onBack = { phase = Phase.SETTINGS }),
+                        )
+                    else -> Unit
+                }
+            }
         Phase.ERROR ->
             ErrorScreen(
                 message = errorMsg,

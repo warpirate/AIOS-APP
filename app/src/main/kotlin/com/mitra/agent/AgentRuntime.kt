@@ -43,8 +43,14 @@ class AgentRuntime(
                 val plan =
                     try {
                         planner.plan(utterance.text, ctx)
+                    } catch (c: kotlinx.coroutines.CancellationException) {
+                        throw c
                     } catch (t: Throwable) {
-                        emit(RuntimeEvent.Failed(reason = "planner failed: ${t::class.simpleName ?: "unknown"}"))
+                        // Brain throws JNI / runtime errors (e.g. LiteRtLmJniException) surface as
+                        // raw class names look like crashes to non-technical users — keep the
+                        // message warm and actionable. The full exception name is left in the
+                        // exception itself for Logcat / crash readers.
+                        emit(RuntimeEvent.Failed(reason = "I lost my train of thought. Mind sending that again?"))
                         return@flow
                     }
                 emit(RuntimeEvent.PlanReady(plan))
