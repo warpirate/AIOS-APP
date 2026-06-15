@@ -43,6 +43,15 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <!--
+      Place calls directly via ACTION_CALL for make_call. Without this, Mitra falls back to
+      ACTION_DIAL (opens the dialer pre-filled). With this granted, ACTION_CALL places the call
+      after the in-app ConfirmationGate modal — Mitra never auto-dials silently. Runtime
+      permission; user grants reactively on the first "call X" attempt or proactively via
+      Settings -> View all permissions.
+    -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+
+    <!--
       Android 11+ package visibility. Without these the system clock app is invisible to our
       PackageManager probes (StartTimer falls through to its last-resort path on every device),
       and launcher app discovery (open_app) returns an empty list.

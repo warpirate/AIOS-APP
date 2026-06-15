@@ -61,10 +61,10 @@ class LiteRtBrain(
         ): Map<String, Any> = mapOf("ok" to true)
 
         @Tool(
-            description = "Use this ONLY when the user explicitly says open / visit / go to a specific website, names a domain like youtube.com or github, or pastes a URL. Do NOT use this for learning, teaching, explaining, defining, summarising, translating, or any general-knowledge or content question — those are answered directly in chat, not by opening a search link.",
+            description = "Use this ONLY when the user pasted a URL or explicitly named a website that has a TLD (e.g. 'open youtube.com', 'go to github.com', 'visit example.org'). The argument MUST contain a dot followed by a real TLD (com, org, in, io, co, etc.) AND NO spaces. Do NOT call open_url for: declarations ('that's a spell'), opinions, exclamations, song lyrics, spell names ('lumos maximus'), movie quotes, general statements, factual questions, or any phrase that is not literally a web address. When in doubt, answer in chat instead. Examples that MUST NOT route here: 'lumos maximus', 'that's a spell', 'what is X', 'I think Y', 'cool', 'haha', 'how are you'.",
         )
         fun open_url(
-            @ToolParam(description = "the exact web address — only when the user named a site or pasted a URL") url: String,
+            @ToolParam(description = "the literal web address with TLD and NO spaces — never pass general chat text") url: String,
         ): Map<String, Any> = mapOf("ok" to true)
 
         @Tool(

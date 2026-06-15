@@ -34,6 +34,7 @@ enum class Permission(
     NOTIFICATION_POLICY("notification_policy"),
     BLUETOOTH_CONNECT("bluetooth_connect"),
     READ_CONTACTS("read_contacts", isOnboarding = false),
+    CALL_PHONE("call_phone", isOnboarding = false),
 }
 
 data class PermissionStatus(
@@ -61,11 +62,15 @@ object Permissions {
                     PermissionStatus(Permission.NOTIFICATION_POLICY, isNotificationPolicyGranted(context)),
                     PermissionStatus(Permission.BLUETOOTH_CONNECT, isBluetoothConnectGranted(context)),
                     PermissionStatus(Permission.READ_CONTACTS, isReadContactsGranted(context)),
+                    PermissionStatus(Permission.CALL_PHONE, isCallPhoneGranted(context)),
                 ),
         )
 
     /** Public accessor used by tools (e.g. QueryContacts) to gate execution on the runtime grant. */
     fun hasReadContacts(context: Context): Boolean = isReadContactsGranted(context)
+
+    /** Public accessor used by [com.mitra.tools.MakeCall] to gate ACTION_CALL on the runtime grant. */
+    fun hasCallPhone(context: Context): Boolean = isCallPhoneGranted(context)
 
     fun launchGrant(context: Context, permission: Permission) {
         when (permission) {
@@ -82,6 +87,7 @@ object Permissions {
                 )
             Permission.BLUETOOTH_CONNECT -> Unit // requested via ActivityResult in the Composable
             Permission.READ_CONTACTS -> Unit // requested via ActivityResult in the Composable
+            Permission.CALL_PHONE -> Unit // requested via ActivityResult in the Composable
         }
     }
 
@@ -90,6 +96,7 @@ object Permissions {
         when (permission) {
             Permission.BLUETOOTH_CONNECT -> Manifest.permission.BLUETOOTH_CONNECT
             Permission.READ_CONTACTS -> Manifest.permission.READ_CONTACTS
+            Permission.CALL_PHONE -> Manifest.permission.CALL_PHONE
             else -> null
         }
 
@@ -114,5 +121,9 @@ object Permissions {
 
     private fun isReadContactsGranted(context: Context): Boolean =
         context.checkSelfPermission(Manifest.permission.READ_CONTACTS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun isCallPhoneGranted(context: Context): Boolean =
+        context.checkSelfPermission(Manifest.permission.CALL_PHONE) ==
             PackageManager.PERMISSION_GRANTED
 }

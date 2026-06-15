@@ -8,99 +8,123 @@ import android.provider.Settings
 import com.mitra.permissions.Permissions
 
 /**
- * Dial a contact by name or directly by phone number.
+ * Place a phone call to a contact by name or directly to a phone number.
  *
- * SideEffect.None — we use [Intent.ACTION_DIAL] (NOT `ACTION_CALL`). That opens the system dialer
- * pre-filled with the resolved number; the user taps the green button to actually place the call.
- * Mitra never auto-dials. This makes the tool safe enough to bypass [com.mitra.safety.ConfirmationGate]
- * (the dialer itself IS the confirmation), and means we do NOT need the dangerous `CALL_PHONE`
- * runtime permission. Trade-off: one extra tap; in return, zero risk of a surprise outgoing call
- * if the model misreads intent or the contact name resolves wrong.
+ * **SideEffect.Irreversible.** Once dialled, the call is out. The action card in chat MUST gate
+ * via [com.mitra.safety.ConfirmationGate] and surface the resolved name + number to the user
+ * before the call fires; see [previewFor] for the UI helper that does the resolution at card
+ * creation time so the modal can show "Call Blanta — +91 76718 90230?" rather than just "Call".
+ *
+ * Uses [Intent.ACTION_CALL] which places the call immediately via the system telephony stack
+ * (no dialer UI flash, no extra tap). Requires the dangerous `CALL_PHONE` runtime permission. On
+ * a missing grant the tool bounces to the app-permissions page and returns a grant-then-retry
+ * failure — same pattern as QueryContacts. The fallback to `ACTION_DIAL` (which needs no
+ * permission) is intentionally not kept: the user explicitly chose Mitra-places-the-call over
+ * Mitra-opens-the-dialer.
  *
  * Arguments:
  *   - `name`: contact name as the user said it. Three-tier fuzzy match against
- *     [ContactsContract.Contacts.DISPLAY_NAME] (exact → starts-with → contains). First match wins.
- *     If a contact has multiple phones, prefer TYPE_MOBILE; else first phone.
- *   - `number`: phone number, raw as the user spoke / typed it. Used when the user gave digits
- *     directly. Goes straight into `tel:` URI; the dialer is permissive about formatting.
+ *     [ContactsContract.Contacts.DISPLAY_NAME] (exact → starts-with → contains). First match
+ *     wins; for multiple phones on a contact, TYPE_MOBILE is preferred, else first phone.
+ *   - `number`: phone number, raw as the user spoke / typed it. Wins over `name` when both are
+ *     present (explicit beats ambiguous).
  *
- * If both name and number are provided, `number` wins (the user named a specific number).
- * If neither is provided, returns Failure asking who to call.
- *
- * Privacy: name search uses an explicit ContactsContract projection (no null projection).
+ * Privacy: name resolution uses an explicit ContactsContract projection (no null projection).
  * [com.mitra.safety.AuditLog] records `make_call` + outcome only — never the name, never the
- * number, never the matched contact display name. The existing whitelist test enforces.
+ * number, never the matched contact display name.
  */
 class MakeCall(
     private val context: Context,
 ) : Tool {
     override val name = "make_call"
-    override val sideEffect = SideEffect.None
+    override val sideEffect = SideEffect.Irreversible
 
     override fun execute(args: Map<String, Any?>): ToolResult {
-        val numberArg = argString(args["number"])
-        val nameArg = argString(args["name"])
-        // Number wins if both present — explicit beats ambiguous.
-        val (target, resolvedNumber) =
-            when {
-                numberArg != null -> nameArg.orEmpty().ifBlank { numberArg } to numberArg
-                nameArg != null -> {
-                    if (!Permissions.hasReadContacts(context)) {
-                        bounceToAppPermissions()
-                        return ToolResult.Failure(
-                            "Grant Mitra Contacts permission on the page I just opened, then ask again",
-                        )
-                    }
-                    val number = resolveContactNumber(nameArg)
-                        ?: return ToolResult.Failure("No contact named '$nameArg'")
-                    nameArg to number
-                }
-                else -> return ToolResult.Failure("Who should I call?")
-            }
+        val resolved = resolveTarget(args) ?: return ToolResult.Failure("Who should I call?")
+
+        if (!Permissions.hasCallPhone(context)) {
+            bounceToAppPermissions()
+            return ToolResult.Failure(
+                "Grant Mitra the Phone permission on the page I just opened, then ask again",
+            )
+        }
 
         return try {
             val intent =
-                Intent(Intent.ACTION_DIAL)
-                    .setData(Uri.parse("tel:${Uri.encode(resolvedNumber)}"))
+                Intent(Intent.ACTION_CALL)
+                    .setData(Uri.parse("tel:${Uri.encode(resolved.number)}"))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
-            ToolResult.Success("Calling $target — confirm in the dialer")
+            ToolResult.Success("Calling ${resolved.displayLabel}")
         } catch (_: SecurityException) {
-            ToolResult.Failure("Couldn't open the dialer — system refused")
+            ToolResult.Failure("Phone permission missing — grant it and ask again")
         } catch (_: Exception) {
-            ToolResult.Failure("Couldn't open the dialer")
+            ToolResult.Failure("Couldn't place the call")
         }
     }
 
     /**
-     * Three-tier name match. Returns the preferred phone number for the first matching contact,
-     * or null if nothing matched / contact had no phones.
+     * Resolve raw tool args into a target with a definite phone number. Pure function — does
+     * NOT side-effect (does not bounce, does not start activities). Used both by [execute] and
+     * by the UI preview helper [previewFor]. Returns null if neither a number nor a resolvable
+     * name was provided.
      */
-    private fun resolveContactNumber(query: String): String? {
-        val contactId = findFirstContactId(query) ?: return null
-        return preferredPhoneFor(contactId)
+    private fun resolveTarget(args: Map<String, Any?>): ResolvedTarget? {
+        val numberArg = argString(args["number"])
+        val nameArg = argString(args["name"])
+        return when {
+            // Number wins: explicit digits beat name-resolution. Display label prefers the name
+            // when both were given so the confirm card reads "Call Mom — +91 98XXX?" not
+            // "Call +91 98XXX — +91 98XXX?".
+            numberArg != null -> {
+                val label = nameArg ?: numberArg
+                ResolvedTarget(label, numberArg)
+            }
+            nameArg != null -> {
+                if (!Permissions.hasReadContacts(context)) return null
+                val (display, number) = resolveContactPhone(nameArg) ?: return null
+                ResolvedTarget(display, number)
+            }
+            else -> null
+        }
     }
 
-    private fun findFirstContactId(query: String): Long? {
+    /** Public preview helper for the chat action card. Safe to call from UI thread. */
+    fun previewFor(args: Map<String, Any?>): String? {
+        val r = resolveTarget(args) ?: return null
+        return if (r.displayLabel == r.number) r.number else "${r.displayLabel} — ${r.number}"
+    }
+
+    private data class ResolvedTarget(val displayLabel: String, val number: String)
+
+    /**
+     * Returns (displayName, preferredNumber) for the first matched contact, or null.
+     *
+     * Match strategy is **deliberately stricter than QueryContacts**: we do exact + starts-with
+     * only. The contains-tier is dropped because auto-dialling is irreversible — "call cops"
+     * should NOT auto-resolve to a contact whose name happens to contain "cop" (e.g. "Cooperative
+     * Bank"). If the user wants a fuzzier search, they can ask `query_contacts` first.
+     */
+    private fun resolveContactPhone(query: String): Pair<String, String>? {
         val q = query.trim()
         if (q.isEmpty()) return null
 
         // Tier 1: exact
-        firstId("LOWER(${ContactsContract.Contacts.DISPLAY_NAME}) = LOWER(?)", arrayOf(q))?.let { return it }
+        firstContact("LOWER(${ContactsContract.Contacts.DISPLAY_NAME}) = LOWER(?)", arrayOf(q))?.let { return it }
         // Tier 2: starts-with
-        firstId(
+        return firstContact(
             "LOWER(${ContactsContract.Contacts.DISPLAY_NAME}) LIKE LOWER(?) || '%'",
-            arrayOf(q),
-        )?.let { return it }
-        // Tier 3: contains
-        return firstId(
-            "LOWER(${ContactsContract.Contacts.DISPLAY_NAME}) LIKE '%' || LOWER(?) || '%'",
             arrayOf(q),
         )
     }
 
-    private fun firstId(selection: String, selectionArgs: Array<String>): Long? {
-        val projection = arrayOf(ContactsContract.Contacts._ID)
+    private fun firstContact(selection: String, selectionArgs: Array<String>): Pair<String, String>? {
+        val projection =
+            arrayOf(
+                ContactsContract.Contacts._ID,
+                ContactsContract.Contacts.DISPLAY_NAME,
+            )
+        var idAndName: Pair<Long, String>? = null
         context.contentResolver.query(
             ContactsContract.Contacts.CONTENT_URI,
             projection,
@@ -108,15 +132,18 @@ class MakeCall(
             selectionArgs,
             "${ContactsContract.Contacts.DISPLAY_NAME} ASC",
         )?.use { c ->
-            if (c.moveToFirst()) return c.getLong(0)
+            if (c.moveToFirst()) {
+                val id = c.getLong(c.getColumnIndexOrThrow(ContactsContract.Contacts._ID))
+                val name = c.getString(c.getColumnIndexOrThrow(ContactsContract.Contacts.DISPLAY_NAME))
+                if (name != null) idAndName = id to name
+            }
         }
-        return null
+        val (contactId, displayName) = idAndName ?: return null
+        val phone = preferredPhoneFor(contactId) ?: return null
+        return displayName to phone
     }
 
-    /**
-     * Returns the preferred phone for the contact: TYPE_MOBILE first, then the first phone of any
-     * type. Returns null if the contact has no phones.
-     */
+    /** TYPE_MOBILE preferred; else the first phone of any type. */
     private fun preferredPhoneFor(contactId: Long): String? {
         val projection =
             arrayOf(

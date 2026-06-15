@@ -267,7 +267,7 @@ fun ChatScreen(
                                 ActionCard(
                                     id = id,
                                     title = actionTitle(call),
-                                    detail = actionDetail(call),
+                                    detail = actionDetail(call, context),
                                     state =
                                         if (gated && step.sideEffect == com.mitra.tools.SideEffect.Irreversible) {
                                             ActionState.CONFIRM
@@ -367,7 +367,7 @@ private fun actionTitle(call: ToolCall): String =
         else -> call.name.replace('_', ' ').replaceFirstChar { it.uppercase() }
     }
 
-private fun actionDetail(call: ToolCall): String =
+private fun actionDetail(call: ToolCall, context: android.content.Context): String =
     when (call.name) {
         "set_alarm" -> {
             val h = (call.args["hour"] as? Number)?.toInt()
@@ -414,9 +414,14 @@ private fun actionDetail(call: ToolCall): String =
         }
         "query_contacts" -> (call.args["name"] as? String).orEmpty()
         "make_call" -> {
-            val name = (call.args["name"] as? String).orEmpty().ifBlank { null }
-            val number = (call.args["number"] as? String).orEmpty().ifBlank { null }
-            name ?: number ?: ""
+            // Resolve through the same logic MakeCall.execute uses so the confirm card shows
+            // the real target ("Blanta — +91 76718 90230") not just the raw arg ("blanta").
+            // The lookup is a single ContentResolver query, fine on UI thread for action card init.
+            val preview = runCatching { com.mitra.tools.MakeCall(context).previewFor(call.args) }.getOrNull()
+            preview
+                ?: (call.args["name"] as? String).orEmpty().ifBlank {
+                    (call.args["number"] as? String).orEmpty()
+                }
         }
         // Title already speaks for these — no detail needed.
         "toggle_flashlight", "set_dnd", "set_auto_rotate", "set_bluetooth" -> ""

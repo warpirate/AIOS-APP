@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -425,6 +426,7 @@ private fun iconFor(p: Permission): ImageVector =
         Permission.NOTIFICATION_POLICY -> Icons.Filled.NotificationsOff
         Permission.BLUETOOTH_CONNECT -> Icons.Filled.Bluetooth
         Permission.READ_CONTACTS -> Icons.Filled.Contacts
+        Permission.CALL_PHONE -> Icons.Filled.Phone
     }
 
 private fun titleFor(p: Permission): String =
@@ -433,6 +435,7 @@ private fun titleFor(p: Permission): String =
         Permission.NOTIFICATION_POLICY -> "Control Do Not Disturb"
         Permission.BLUETOOTH_CONNECT -> "Switch Bluetooth on and off"
         Permission.READ_CONTACTS -> "Find contacts"
+        Permission.CALL_PHONE -> "Place calls"
     }
 
 private fun whyFor(p: Permission): String =
@@ -445,6 +448,8 @@ private fun whyFor(p: Permission): String =
             "Mitra switches Bluetooth on and off directly. Without this, Mitra opens the Bluetooth page instead."
         Permission.READ_CONTACTS ->
             "Mitra looks up phone numbers when you ask. Without this, name lookups won't work."
+        Permission.CALL_PHONE ->
+            "Mitra places calls from inside the app when you say 'call X'. Every call is shown for confirm before it dials."
     }
 
 @Composable
@@ -454,9 +459,13 @@ private fun PermissionPreview(perm: Permission) {
             Permission.WRITE_SETTINGS -> com.mitra.R.raw.perm_settings
             Permission.NOTIFICATION_POLICY -> com.mitra.R.raw.perm_dnd
             Permission.BLUETOOTH_CONNECT -> com.mitra.R.raw.perm_bluetooth
-            // No preview video for Contacts; render a calm placeholder card with the icon instead.
+            // No preview video for the reactive-grant perms; render a calm icon placeholder.
             Permission.READ_CONTACTS -> {
-                ContactsPreviewPlaceholder()
+                IconPreviewPlaceholder(icon = Icons.Filled.Contacts)
+                return
+            }
+            Permission.CALL_PHONE -> {
+                IconPreviewPlaceholder(icon = Icons.Filled.Phone)
                 return
             }
         }
@@ -473,7 +482,7 @@ private fun PermissionPreview(perm: Permission) {
 }
 
 @Composable
-private fun ContactsPreviewPlaceholder() {
+private fun IconPreviewPlaceholder(icon: ImageVector) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(24.dp),
@@ -490,7 +499,7 @@ private fun ContactsPreviewPlaceholder() {
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    Icons.Filled.Contacts,
+                    icon,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(40.dp),
