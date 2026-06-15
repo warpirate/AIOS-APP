@@ -240,6 +240,30 @@ class LiteRtBrain(
             }
         }.flowOn(Dispatchers.IO)
 
+    /**
+     * Feed a tool-execution result back into the conversation as a `Content.ToolResponse` and
+     * stream the brain's next reply (which may carry the next tool call). The runtime calls
+     * this once per tool it dispatched, in order, within the same turn.
+     *
+     * `result` is the structured outcome map. Convention used by [com.mitra.agent.AgentRuntime]:
+     *   - On Success: `{ "ok": true, "message": "<backend message>" }`
+     *   - On Failure: `{ "ok": false, "error": "<backend error>" }`
+     *   - On user-cancelled gate: `{ "cancelled": true }`
+     * The brain reads these to decide whether to retry, branch, or finish.
+     */
+    override fun sendToolResult(toolName: String, result: Map<String, Any?>): Flow<BrainTurn> =
+        flow {
+            var acc = ""
+            var call: ToolCall? = null
+            val response = Contents.of(Content.ToolResponse(name = toolName, response = result))
+            conversation.sendMessageAsync(response).collect { msg ->
+                val piece = textOf(msg)
+                acc = if (piece.isNotEmpty() && piece.startsWith(acc)) piece else acc + piece
+                msg.toolCalls.firstOrNull()?.let { call = ToolCall(it.name, argsToMap(it.arguments)) }
+                emit(BrainTurn(sanitize(acc), call))
+            }
+        }.flowOn(Dispatchers.IO)
+
     private fun textOf(message: Message): String =
         message.contents.contents
             .filterIsInstance<Content.Text>()
