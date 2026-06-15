@@ -310,16 +310,20 @@ fun ChatScreen(
         val msgIdx = items.size
         items.add(MitraMsg(""))
         scope.launch {
-            val runtime =
-                buildRuntime { chunk ->
-                    // Update the streaming reply bubble as chunks arrive.
-                    if (msgIdx < items.size) items[msgIdx] = MitraMsg(chunk)
-                }
+            // The old onChunk hook is no longer plumbed — the agentic loop emits streaming text
+            // via RuntimeEvent.Speaking. The lambda parameter stays for binary compat with the
+            // buildRuntime signature but is intentionally ignored.
+            val runtime = buildRuntime { _ -> }
             activeRuntime = runtime
             var lastCardId: Int? = null
             runtime.run(com.mitra.agent.UserUtterance(text = text, source = "chat")).collect { event ->
                 when (event) {
-                    is RuntimeEvent.Speaking -> { /* handled by onChunk */ }
+                    is RuntimeEvent.Speaking -> {
+                        // Agentic-loop streaming text. Update the in-flight Mitra bubble each
+                        // emission so the user sees the reply build up before the (optional)
+                        // tool call surfaces and we drop the bubble for an action card.
+                        if (msgIdx < items.size) items[msgIdx] = MitraMsg(event.text)
+                    }
                     is RuntimeEvent.PlanReady -> {
                         if (event.plan.steps.isNotEmpty()) {
                             // Drop the streaming bubble in favour of an action card.
