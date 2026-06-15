@@ -36,7 +36,7 @@ data class BrainTurn(
 class LiteRtBrain(
     modelPath: String,
     cacheDir: String,
-) {
+) : Brain {
     private val engine =
         Engine(
             EngineConfig(modelPath = modelPath, backend = Backend.CPU(), cacheDir = cacheDir),
@@ -226,7 +226,7 @@ class LiteRtBrain(
     }
 
     /** Streams the reply; the tool call (if any) is attached as soon as the runtime surfaces it. */
-    fun chatStream(userText: String): Flow<BrainTurn> =
+    override fun chatStream(userText: String): Flow<BrainTurn> =
         flow {
             var acc = ""
             var call: ToolCall? = null
