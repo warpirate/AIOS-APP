@@ -25,7 +25,9 @@ import kotlinx.coroutines.flow.flow
  * in Phase 2 (see spec §6 Phase 2 chain-confirm UX). [SideEffect.None] steps also auto-run.
  */
 class AgentRuntime(
-    private val planner: Planner,
+    private val brain: com.mitra.inference.Brain?,
+    private val parser: IntentParser,
+    private val sideEffectOf: (String) -> SideEffect,
     private val backends: List<AutomationBackend>,
     private val context: ContextStore,
     private val audit: AuditLog,
@@ -40,19 +42,24 @@ class AgentRuntime(
             context.beginTurn(utterance)
             try {
                 val ctx = context.turn() ?: error("turn missing after beginTurn")
+                @Suppress("UNUSED_VARIABLE") val ctxRead = ctx
+                // Phase-1 placeholder: build a single-step plan from IntentParser if it matches;
+                // otherwise an empty plan. Task 6 replaces this block with the real agentic loop.
                 val plan =
-                    try {
-                        planner.plan(utterance.text, ctx)
-                    } catch (c: kotlinx.coroutines.CancellationException) {
-                        throw c
-                    } catch (t: Throwable) {
-                        // Brain throws JNI / runtime errors (e.g. LiteRtLmJniException) surface as
-                        // raw class names look like crashes to non-technical users — keep the
-                        // message warm and actionable. The full exception name is left in the
-                        // exception itself for Logcat / crash readers.
-                        emit(RuntimeEvent.Failed(reason = "I lost my train of thought. Mind sending that again?"))
-                        return@flow
-                    }
+                    parser.route(utterance.text)?.let { call ->
+                        Plan(
+                            steps =
+                                listOf(
+                                    PlannedStep(
+                                        toolName = call.name,
+                                        args = call.args,
+                                        sideEffect = sideEffectOf(call.name),
+                                    ),
+                                ),
+                            rationale = null,
+                            confidence = 1.0f,
+                        )
+                    } ?: Plan(steps = emptyList(), rationale = null, confidence = 1.0f)
                 emit(RuntimeEvent.PlanReady(plan))
 
                 if (plan.steps.isEmpty()) {

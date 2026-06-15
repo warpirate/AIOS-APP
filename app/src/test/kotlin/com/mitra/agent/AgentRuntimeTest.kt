@@ -14,12 +14,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-private class StubPlanner(
-    private val plan: Plan,
-) : Planner {
-    override suspend fun plan(utterance: String, ctx: TurnContext): Plan = plan
-}
-
 private class StubBackend(
     private val result: BackendResult = BackendResult.Success("ok"),
 ) : AutomationBackend {
@@ -35,9 +29,20 @@ private class StubBackend(
 }
 
 class AgentRuntimeTest {
-    private fun runtimeWith(plan: Plan, backend: StubBackend = StubBackend()): AgentRuntime =
+    private fun fixedParser(match: ToolCall?): IntentParser =
+        object : IntentParser() {
+            override fun route(input: String): ToolCall? = match
+        }
+
+    private fun runtimeWith(
+        intentMatch: ToolCall? = null,
+        backend: StubBackend = StubBackend(),
+        sideEffectOf: (String) -> SideEffect = { SideEffect.None },
+    ): AgentRuntime =
         AgentRuntime(
-            planner = StubPlanner(plan),
+            brain = null,
+            parser = fixedParser(intentMatch),
+            sideEffectOf = sideEffectOf,
             backends = listOf(backend),
             context = TurnOnlyContextStore { 0L },
             audit = AuditLog(),
@@ -46,7 +51,7 @@ class AgentRuntimeTest {
     @Test
     fun `empty plan emits PlanReady then Done`() =
         runBlocking {
-            val rt = runtimeWith(Plan(emptyList(), null, 1.0f))
+            val rt = runtimeWith(intentMatch = null)
             val events = rt.run(UserUtterance("hi", "test")).toList()
             assertTrue(events.any { it is RuntimeEvent.PlanReady })
             assertTrue(events.last() is RuntimeEvent.Done)
@@ -55,9 +60,13 @@ class AgentRuntimeTest {
     @Test
     fun `single None-side-effect step runs without gate`() =
         runBlocking {
-            val plan = Plan(listOf(PlannedStep("open_url", mapOf("url" to "x.com"), SideEffect.None)), null, 1.0f)
             val backend = StubBackend()
-            val rt = runtimeWith(plan, backend)
+            val rt =
+                runtimeWith(
+                    intentMatch = ToolCall("open_url", mapOf("url" to "x.com")),
+                    backend = backend,
+                    sideEffectOf = { SideEffect.None },
+                )
             val events = rt.run(UserUtterance("open x.com", "test")).toList()
             assertEquals(1, backend.dispatches.size)
             assertTrue(events.none { it is RuntimeEvent.GateRequested })
@@ -68,16 +77,18 @@ class AgentRuntimeTest {
     @Test
     fun `Irreversible step pauses on GateRequested and runs after Approve`() =
         runBlocking {
-            val plan = Plan(listOf(PlannedStep("send_sms", mapOf("to" to "x", "body" to "y"), SideEffect.Irreversible)), null, 1.0f)
             val backend = StubBackend()
-            val rt = runtimeWith(plan, backend)
+            val rt =
+                runtimeWith(
+                    intentMatch = ToolCall("send_sms", mapOf("to" to "x", "body" to "y")),
+                    backend = backend,
+                    sideEffectOf = { SideEffect.Irreversible },
+                )
             val collected = mutableListOf<RuntimeEvent>()
             val job =
                 launch {
                     rt.run(UserUtterance("send sms", "test")).collect { collected += it }
                 }
-            // Wait for the gate event to appear. delay(1) yields to the runBlocking dispatcher so the
-            // launched collector coroutine can progress (a tight spin would deadlock here).
             while (collected.none { it is RuntimeEvent.GateRequested }) {
                 delay(1)
             }
@@ -91,9 +102,13 @@ class AgentRuntimeTest {
     @Test
     fun `Irreversible step cancelled by user produces Failed terminal`() =
         runBlocking {
-            val plan = Plan(listOf(PlannedStep("send_sms", mapOf("to" to "x"), SideEffect.Irreversible)), null, 1.0f)
             val backend = StubBackend()
-            val rt = runtimeWith(plan, backend)
+            val rt =
+                runtimeWith(
+                    intentMatch = ToolCall("send_sms", mapOf("to" to "x")),
+                    backend = backend,
+                    sideEffectOf = { SideEffect.Irreversible },
+                )
             val collected = mutableListOf<RuntimeEvent>()
             val job =
                 launch {
@@ -111,9 +126,13 @@ class AgentRuntimeTest {
     @Test
     fun `backend failure makes runtime emit Failed`() =
         runBlocking {
-            val plan = Plan(listOf(PlannedStep("open_url", mapOf("url" to "x"), SideEffect.None)), null, 1.0f)
             val backend = StubBackend(BackendResult.Failure("boom"))
-            val rt = runtimeWith(plan, backend)
+            val rt =
+                runtimeWith(
+                    intentMatch = ToolCall("open_url", mapOf("url" to "x")),
+                    backend = backend,
+                    sideEffectOf = { SideEffect.None },
+                )
             val events = rt.run(UserUtterance("open x", "test")).toList()
             assertTrue(events.last() is RuntimeEvent.Failed)
         }
@@ -121,10 +140,11 @@ class AgentRuntimeTest {
     @Test
     fun `no backend supports the action - Failed`() =
         runBlocking {
-            val plan = Plan(listOf(PlannedStep("nope", emptyMap(), SideEffect.None)), null, 1.0f)
             val rt =
                 AgentRuntime(
-                    planner = StubPlanner(plan),
+                    brain = null,
+                    parser = fixedParser(ToolCall("nope", emptyMap())),
+                    sideEffectOf = { SideEffect.None },
                     backends = emptyList(),
                     context = TurnOnlyContextStore { 0L },
                     audit = AuditLog(),
@@ -136,9 +156,13 @@ class AgentRuntimeTest {
     @Test
     fun `Reversible step runs without GateRequested (V1 intentional)`() =
         runBlocking {
-            val plan = Plan(listOf(PlannedStep("set_brightness", mapOf("level" to 50), SideEffect.Reversible)), null, 1.0f)
             val backend = StubBackend()
-            val rt = runtimeWith(plan, backend)
+            val rt =
+                runtimeWith(
+                    intentMatch = ToolCall("set_brightness", mapOf("level" to 50)),
+                    backend = backend,
+                    sideEffectOf = { SideEffect.Reversible },
+                )
             val events = rt.run(UserUtterance("set brightness to 50%", "test")).toList()
             assertEquals(1, backend.dispatches.size)
             assertTrue("Reversible must not pause on a gate in V1", events.none { it is RuntimeEvent.GateRequested })

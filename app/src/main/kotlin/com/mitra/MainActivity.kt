@@ -16,8 +16,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.mitra.agent.AgentRuntime
 import com.mitra.agent.IntentParser
-import com.mitra.agent.IntentParserPlanner
-import com.mitra.agent.SingleShotPlanner
 import com.mitra.agent.TurnOnlyContextStore
 import com.mitra.automation.ManagerApiBackend
 import com.mitra.inference.LiteRtBrain
@@ -63,20 +61,18 @@ class MainActivity : ComponentActivity() {
                     modelFile = modelFile,
                     cacheDir = cacheDir,
                     sideEffectOf = sideEffectOf,
-                    buildRuntime = { brain, onChunk ->
-                        val parser = IntentParser()
-                        val planner =
-                            if (brain != null) {
-                                SingleShotPlanner(
-                                    brainStream = brain::chatStream,
-                                    parser = parser,
-                                    sideEffectOf = sideEffectOf,
-                                    onChunk = onChunk,
-                                )
-                            } else {
-                                IntentParserPlanner(parser, sideEffectOf)
-                            }
-                        AgentRuntime(planner, listOf(backend), context, audit)
+                    buildRuntime = { brain, _ ->
+                        // ChatScreen reads streaming text from RuntimeEvent.Speaking; the legacy
+                        // onChunk callback is intentionally ignored. brain == null falls through to
+                        // the IntentParser-only path inside AgentRuntime.
+                        AgentRuntime(
+                            brain = brain,
+                            parser = IntentParser(),
+                            sideEffectOf = sideEffectOf,
+                            backends = listOf(backend),
+                            context = context,
+                            audit = audit,
+                        )
                     },
                 )
             }
