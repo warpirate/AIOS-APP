@@ -1,6 +1,7 @@
 # Mitra Agentic Loop — Design (P1)
 
 **Status:** Approved 2026-06-15 (chat brainstorm).
+**Implementation status:** Shipped 2026-06-15 in commits `07e5156..c99245c`. Implementation plan: [docs/superpowers/plans/2026-06-15-agentic-loop.md](../../plans/2026-06-15-agentic-loop.md). Manual test log: [docs/research/2026-06-15-agentic-loop-manual-test.md](../../../research/2026-06-15-agentic-loop-manual-test.md). 12 unit tests passing; 8/8 manual scenarios pass on Realme CPH2401.
 **Plan task:** none directly — this is the V2 planner work foreshadowed in [plan.md](../../../plan.md) right-now task list and the M5/M6 PlanThenExecutePlanner row.
 **Owner:** @warpirate
 **Scope tag:** P1. P2 (cross-turn memory + proactive clarification) is a separate spec.

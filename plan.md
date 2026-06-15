@@ -127,13 +127,13 @@ The V1 brain is single-shot: emit ONE tool call per turn, dispatch, done. M2.5 r
 
 Spec: [docs/superpowers/specs/2026-06-15-agentic-loop-design.md](docs/superpowers/specs/2026-06-15-agentic-loop-design.md).
 
-- [ ] `LiteRtBrain.sendToolResult(name, resultMap)` — pushes `Content.ToolResponse` into the conversation, returns next streaming `Flow<BrainTurn>`
-- [ ] Rework `AgentRuntime` to own the agentic loop directly; delete `SingleShotPlanner`; keep `IntentParser` shortcut as the deterministic pre-brain path
-- [ ] System prompt: new `COMPOSE` / `TONE` / `AGENTIC` sections (draft body from intent, mirror user mood in 1 clause, reason about tool results)
-- [ ] `send_sms.body` description rewritten so the brain drafts the body, not copies user words verbatim
-- [ ] Step cap = 5; cancel-from-confirm feeds `{"cancelled": true}` to brain
-- [ ] Unit tests: chain success, cancel mid-chain, fail-then-replan, step-cap hit, JNI error path
-- [ ] Manual on-device test of 8 scenarios from the brainstorm session (compose, chain, multi-tool, fail+reflect within turn, tone, alarm-with-label, ringer+dnd combo)
+- [x] `LiteRtBrain.sendToolResult(name, resultMap)` — pushes `Content.ToolResponse` into the conversation, returns next streaming `Flow<BrainTurn>`. Shipped 2026-06-15 in `78c9936`.
+- [x] Rework `AgentRuntime` to own the agentic loop directly; delete `SingleShotPlanner`; keep `IntentParser` shortcut as the deterministic pre-brain path. Shipped 2026-06-15 in `1c701f8` + `866c5d8` + `61a76c1`.
+- [x] System prompt: new `COMPOSE` / `TONE` / `AGENTIC` sections. Shipped 2026-06-15 in `c99245c`.
+- [x] `send_sms.body` description rewritten so the brain drafts the body, not copies user words verbatim. Shipped 2026-06-15 in `c99245c`.
+- [x] Step cap = 5; cancel-from-confirm feeds `{"cancelled": true}` to brain. Shipped 2026-06-15 in `866c5d8`.
+- [x] Unit tests: chain success, cancel mid-chain, fail-then-replan, step-cap hit, JNI error path. Shipped 2026-06-15 in `866c5d8` + `7a624f5` (12 passing tests total).
+- [x] Manual on-device test of 8 scenarios. Walked 2026-06-15 on Realme CPH2401, 8/8 pass — see [docs/research/2026-06-15-agentic-loop-manual-test.md](docs/research/2026-06-15-agentic-loop-manual-test.md).
 
 **Exit:** brain handles multi-step turns with composition + tone; the 8 manual scenarios pass on the dev device; `AgentRuntimeTest` covers the chain / cancel / replan / cap / JNI-error paths.
 
@@ -246,13 +246,13 @@ Mirrored from `docs/risks.md`. Highest-priority three only:
 
 Updated 2026-06-15. M1 tool surface effectively complete: all V1 device-control + telephony tools shipped (`toggle_flashlight`, `set_alarm`, `start_timer`, `open_url`, `open_app`, `open_settings`, `query_contacts`, `make_call`, `send_sms`, `set_media_volume`, `set_brightness`, `set_dnd`, `set_ringer_mode`, `set_auto_rotate`, `set_screen_timeout`, `set_bluetooth`). Focus shifts to making the brain *agentic* (M2.5) and laying the AutomationBackend seam (M5.5) before the AccessibilityService work in M6.
 
-1. **Ship M2.5 agentic loop** — write the implementation plan from [docs/superpowers/specs/2026-06-15-agentic-loop-design.md](docs/superpowers/specs/2026-06-15-agentic-loop-design.md) and land it. Highest-leverage UX work right now; everything else (WhatsApp, scheduling, smart clarification) sits behind a brain that can chain + compose.
-2. **M2 safety landed (in-flight):** `safety/ConfirmationGate.kt` + `safety/AuditLog.kt` + JUnit coverage exist. Next: wire AuditLog into a debug-only history screen behind a dev flag.
-3. **Fix `start_timer` on OnePlus Nord 2T** — `ACTION_SET_TIMER` returns "no clock app". Add Google Clock package fallback, then a `setExactAndAllowWhileIdle` in-app timer as the last resort.
-4. **CI + lint (M0 close-outs):** wire GitHub Actions `build + lint + unit test on push`. Add a minimal ktlint config; defer the custom privacy-invariant rules until M2 audit log is consumed by UI.
-5. **Pin SDK / NDK / AGP** + commit `.tool-versions`.
-6. **Hardware truth test** — still owed on a real SD7 Gen 2 / 6 GB device. Cold-start, warm p50/p95, sustained 10-call thermal point. Park results in `docs/research/`.
-7. **P2 brain work (after M2.5 ships):** cross-turn `ContextStore` (turn 1 "what's blanta's number" → turn 2 "text her hi") + proactive pre-tool clarification ("text the boss" with no boss-contact → ask "who's the boss?"). Own design + plan.
+1. **P2 brain work (next up after M2.5 shipped):** cross-turn `ContextStore` (turn 1 "what's blanta's number" → turn 2 "text her hi") + proactive pre-tool clarification ("text the boss" with no boss-contact → ask "who's the boss?"). Own design + plan; same shape as the agentic-loop spec/plan we just shipped.
+2. ~~**Ship M2.5 agentic loop**~~ Shipped 2026-06-15 in commits `07e5156..c99245c`. Spec [docs/superpowers/specs/2026-06-15-agentic-loop-design.md](docs/superpowers/specs/2026-06-15-agentic-loop-design.md); plan [docs/superpowers/plans/2026-06-15-agentic-loop.md](docs/superpowers/plans/2026-06-15-agentic-loop.md); manual test log [docs/research/2026-06-15-agentic-loop-manual-test.md](docs/research/2026-06-15-agentic-loop-manual-test.md). 8/8 scenarios pass on device.
+3. **M2 safety landed (in-flight):** `safety/ConfirmationGate.kt` + `safety/AuditLog.kt` + JUnit coverage exist. Next: wire AuditLog into a debug-only history screen behind a dev flag.
+4. **Fix `start_timer` on OnePlus Nord 2T** — `ACTION_SET_TIMER` returns "no clock app". Add Google Clock package fallback, then a `setExactAndAllowWhileIdle` in-app timer as the last resort.
+5. **CI + lint (M0 close-outs):** wire GitHub Actions `build + lint + unit test on push`. Add a minimal ktlint config; defer the custom privacy-invariant rules until M2 audit log is consumed by UI.
+6. **Pin SDK / NDK / AGP** + commit `.tool-versions`.
+7. **Hardware truth test** — still owed on a real SD7 Gen 2 / 6 GB device. Cold-start, warm p50/p95, sustained 10-call thermal point. Park results in `docs/research/`.
 8. **WhatsApp Tier 1 path (post-M5.5 + M6):** the user wants Gemini-parity UX — confirm card → silent send → WhatsApp UI never opens. Per 2026-06-15 web research, that requires AccessibilityService for first-message-send (RemoteInput alone only covers replies). Lands as M6 milestone work; no shortcut available. Tier 0 deep-link prefill is explicitly NOT a goal — UX gap is too visible.
 9. ~~**Add `query_contacts`**~~ Shipped 2026-06-11; see [docs/superpowers/specs/2026-06-11-query-contacts-design.md](docs/superpowers/specs/2026-06-11-query-contacts-design.md).
 10. **Sustainability bootstrap** — stranger-runnable CONTRIBUTING flow + NLnet NGI Zero application before next even-month deadline. (R-008)
