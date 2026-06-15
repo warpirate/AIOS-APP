@@ -146,6 +146,21 @@ These are the rules every PR must satisfy. The lint that enforces them at build 
 
 See [plan.md](plan.md) for the milestone-by-milestone breakdown. Always link work to a milestone — if you're writing code that doesn't fit a current milestone, stop and ask.
 
+## Keep the docs honest — non-negotiable
+
+Code and docs drift only because no one notices. Stop the drift inside the working session, not later. **Before ending any session that landed code, perform this checklist. Skipping it counts as not finishing the work.**
+
+1. **plan.md M1 / M2 / Mx checklists** — for every file you touched in this session, ask: "is there an unchecked `- [ ]` item that this code shipped?" Tick it. Add a short trailing note (`shipped YYYY-MM-DD` + one-line of what's notable). If you shipped something not in any checklist, add a new ticked row in the right section, don't leave it floating.
+2. **plan.md right-now tasks** — if a task at the top of the file just got done, strike it (`~~...~~`) or rewrite the list. If priorities shifted because of what you discovered (e.g. an unexpected blocker, a new dependency), re-order. Never leave the right-now list reflecting last week's reality.
+3. **Spec status footer** — when the spec at `docs/superpowers/specs/YYYY-MM-DD-foo-design.md` lands its implementation, add a `Status: shipped YYYY-MM-DD (commit <sha>)` line near the top. The spec stays — it's the audit trail for why we built it this way — but its status field tells future readers it's not aspirational anymore.
+4. **Inline `## Right-now tasks` note** — when you ticked something in plan.md, also restate what *replaces* it as the new front of the queue. The right-now list should always end on a task that is genuinely up next, not on something that's already done.
+5. **ADR (`docs/adr/NNNN-foo.md`)** — if the session made a decision a future contributor will second-guess (picking ACTION_CALL over ACTION_DIAL, swapping a runtime backend, dropping a code path), write a 1-page ADR. ADRs are append-only; numbered in order; never overwritten.
+6. **Risk register (`docs/risks.md`)** — if a session surfaced a new risk (e.g. "WhatsApp UI changes break our a11y mapping every quarter"), add it. If it closed one, mark it closed with the resolution.
+
+This is a checklist you run *before* declaring "done", same way you run the test suite. The cost is 3 minutes per session. The cost of skipping it is a `plan.md` that looks like fiction within two months.
+
+The single counter-example: pure exploration sessions where nothing landed and nothing was decided. Even then, if you read enough of the code to notice something stale, fix the stale line on your way out.
+
 ## Where to find what
 
 - **Product vision and capability tiers:** [PRD.md](PRD.md)
