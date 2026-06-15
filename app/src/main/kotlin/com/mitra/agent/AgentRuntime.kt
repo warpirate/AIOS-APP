@@ -9,20 +9,36 @@ import com.mitra.tools.SideEffect
 import com.mitra.tools.ToolResult
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
 
 /**
- * State machine: utterance -> plan -> dispatch each step (gating Irreversible) -> Done/Failed.
- * Replaces the old AgentLoop. Owns the turn lifecycle (no caller touches ContextStore).
+ * State machine: utterance -> plan -> dispatch step (gating Irreversible) -> feed result back to
+ * brain -> repeat until no more tool calls or [STEP_CAP] is hit -> Done/Failed.
  *
- * V1 keeps it deliberately small: no retry-on-failure, no replan-from-runtime (Planner can replan
- * itself but the runtime won't re-call it for a single-shot failure). Those land with
- * [com.mitra.agent.SingleShotPlanner]'s Phase 2 successor.
+ * Two execution modes within a single `run(utterance)` call:
+ *
+ *  - **IntentParser shortcut:** [parser].route matches → one step dispatched, then Done. No brain
+ *    involvement. Deterministic regex fallback for the 25-ish common commands.
+ *  - **Agentic loop:** parser does NOT match AND [brain] is non-null → stream brain.chatStream,
+ *    dispatch each tool call as it arrives, feed `Content.ToolResponse` back via
+ *    [com.mitra.inference.Brain.sendToolResult], repeat up to [STEP_CAP] iterations. Final brain
+ *    text becomes Done.summary.
+ *
+ * Brain-less mode (model failed to load and parser didn't match) emits an empty plan + a friendly
+ * Done.
  *
  * **Gate policy (V1):** Only [SideEffect.Irreversible] steps emit a [RuntimeEvent.GateRequested]
- * and wait for [resume]. [SideEffect.Reversible] steps run without a runtime gate — the UI
- * shows them as RUNNING with a toast. The bulk pre-confirm card for Reversible chains lands
- * in Phase 2 (see spec §6 Phase 2 chain-confirm UX). [SideEffect.None] steps also auto-run.
+ * and wait for [resume]. [SideEffect.Reversible] / [SideEffect.None] auto-run. The bulk
+ * pre-confirm card for Reversible chains is deferred to Phase 2.
+ *
+ * **Failure-recovery policy:** When dispatch fails inside the loop, the failure is fed back into
+ * the brain conversation as `{"ok": false, "error": "..."}`. The brain decides what to do next:
+ * call another tool with different args, ask the user, or finish. This is the core of the agentic
+ * shape — no hard-coded retry, no silent skip.
+ *
+ * Cancellation at the gate is communicated to the brain as `{"cancelled": true}` so the brain can
+ * finish with an acknowledging clause (e.g. "okay, didn't send.") instead of looping.
  */
 class AgentRuntime(
     private val brain: com.mitra.inference.Brain?,
@@ -41,67 +57,81 @@ class AgentRuntime(
             currentGate = gate
             context.beginTurn(utterance)
             try {
-                val ctx = context.turn() ?: error("turn missing after beginTurn")
-                @Suppress("UNUSED_VARIABLE") val ctxRead = ctx
-                // Phase-1 placeholder: build a single-step plan from IntentParser if it matches;
-                // otherwise an empty plan. Task 6 replaces this block with the real agentic loop.
-                val plan =
-                    parser.route(utterance.text)?.let { call ->
-                        Plan(
-                            steps =
-                                listOf(
-                                    PlannedStep(
-                                        toolName = call.name,
-                                        args = call.args,
-                                        sideEffect = sideEffectOf(call.name),
-                                    ),
-                                ),
-                            rationale = null,
-                            confidence = 1.0f,
-                        )
-                    } ?: Plan(steps = emptyList(), rationale = null, confidence = 1.0f)
-                emit(RuntimeEvent.PlanReady(plan))
-
-                if (plan.steps.isEmpty()) {
-                    emit(RuntimeEvent.Done(summary = plan.rationale ?: "nothing to do"))
+                parser.route(utterance.text)?.let { call ->
+                    val step = PlannedStep(call.name, call.args, sideEffectOf(call.name))
+                    emit(RuntimeEvent.PlanReady(Plan(listOf(step), null, 1.0f)))
+                    val failure = dispatchStep(step, index = 0, gate = gate)
+                    when (failure) {
+                        null -> emit(RuntimeEvent.Done(summary = "done"))
+                        CANCEL_SENTINEL -> emit(RuntimeEvent.Failed(reason = "cancelled by user"))
+                        else -> emit(RuntimeEvent.Failed(reason = failure))
+                    }
                     return@flow
                 }
 
-                for ((index, step) in plan.steps.withIndex()) {
-                    // V1 only gates Irreversible. Reversible auto-runs (Phase 2 will add bulk pre-confirm UX).
-                    if (step.sideEffect == SideEffect.Irreversible) {
-                        emit(RuntimeEvent.GateRequested(index, step))
-                        val decision = gate.receive()
-                        if (decision == GateDecision.Cancel) {
-                            audit.record(step.toolName, step.sideEffect, ok = false)
-                            emit(RuntimeEvent.Failed(reason = "cancelled by user"))
-                            return@flow
-                        }
-                    }
-
-                    emit(RuntimeEvent.StepStarted(index, step))
-                    val action = AutomationAction.ToolDispatch(step.toolName, step.args)
-                    val backend = backends.firstOrNull { it.supports(action) }
-                    val result: BackendResult =
-                        backend?.execute(action)
-                            ?: BackendResult.Failure("no backend supports ${step.toolName}")
-
-                    audit.record(step.toolName, step.sideEffect, ok = result is BackendResult.Success)
-                    context.recordToolResult(
-                        when (result) {
-                            is BackendResult.Success -> ToolResult.Success(result.message)
-                            is BackendResult.Failure -> ToolResult.Failure(result.message)
-                        },
-                    )
-                    emit(RuntimeEvent.StepCompleted(index, step, result))
-
-                    if (result is BackendResult.Failure) {
-                        emit(RuntimeEvent.Failed(reason = result.message))
-                        return@flow
-                    }
+                val brain = brain
+                if (brain == null) {
+                    emit(RuntimeEvent.PlanReady(Plan(emptyList(), null, 1.0f)))
+                    emit(RuntimeEvent.Done(summary = "I'm not sure how to help with that one yet."))
+                    return@flow
                 }
 
-                emit(RuntimeEvent.Done(summary = "done"))
+                var stream =
+                    try {
+                        brain.chatStream(utterance.text)
+                    } catch (c: kotlinx.coroutines.CancellationException) {
+                        throw c
+                    } catch (_: Throwable) {
+                        emit(RuntimeEvent.Failed(reason = JNI_FAILURE_REASON))
+                        return@flow
+                    }
+                var stepIndex = 0
+                var lastText = ""
+                while (stepIndex < STEP_CAP) {
+                    var emittedCall: ToolCall? = null
+                    try {
+                        stream.collect { turn ->
+                            if (turn.text.isNotEmpty()) {
+                                lastText = turn.text
+                                emit(RuntimeEvent.Speaking(text = turn.text))
+                            }
+                            turn.toolCall?.let { emittedCall = it }
+                        }
+                    } catch (c: kotlinx.coroutines.CancellationException) {
+                        throw c
+                    } catch (_: Throwable) {
+                        emit(RuntimeEvent.Failed(reason = JNI_FAILURE_REASON))
+                        return@flow
+                    }
+
+                    val call = emittedCall
+                    if (call == null) {
+                        emit(RuntimeEvent.Done(summary = lastText.ifBlank { "done" }))
+                        return@flow
+                    }
+
+                    val step = PlannedStep(call.name, call.args, sideEffectOf(call.name))
+                    emit(RuntimeEvent.PlanReady(Plan(listOf(step), null, 1.0f)))
+                    val failure = dispatchStep(step, index = stepIndex, gate = gate)
+                    val cancelled = failure == CANCEL_SENTINEL
+                    val resultMap =
+                        buildResultMap(
+                            toolName = call.name,
+                            failure = if (cancelled) null else failure,
+                            cancelled = cancelled,
+                        )
+                    stepIndex++
+                    stream =
+                        try {
+                            brain.sendToolResult(call.name, resultMap)
+                        } catch (c: kotlinx.coroutines.CancellationException) {
+                            throw c
+                        } catch (_: Throwable) {
+                            emit(RuntimeEvent.Failed(reason = JNI_FAILURE_REASON))
+                            return@flow
+                        }
+                }
+                emit(RuntimeEvent.Failed(reason = "hit the tool limit — let me know what else you need"))
             } finally {
                 currentGate = null
                 gate.close()
@@ -109,9 +139,57 @@ class AgentRuntime(
             }
         }
 
+    /** Returns null on success, the failure reason string on backend failure, or
+     *  [CANCEL_SENTINEL] on user cancellation at the gate. Emits StepStarted /
+     *  StepCompleted / GateRequested events along the way. */
+    private suspend fun FlowCollector<RuntimeEvent>.dispatchStep(
+        step: PlannedStep,
+        index: Int,
+        gate: Channel<GateDecision>,
+    ): String? {
+        if (step.sideEffect == SideEffect.Irreversible) {
+            emit(RuntimeEvent.GateRequested(index, step))
+            val decision = gate.receive()
+            if (decision == GateDecision.Cancel) {
+                audit.record(step.toolName, step.sideEffect, ok = false)
+                return CANCEL_SENTINEL
+            }
+        }
+        emit(RuntimeEvent.StepStarted(index, step))
+        val action = AutomationAction.ToolDispatch(step.toolName, step.args)
+        val backend = backends.firstOrNull { it.supports(action) }
+        val result: BackendResult =
+            backend?.execute(action) ?: BackendResult.Failure("no backend supports ${step.toolName}")
+        audit.record(step.toolName, step.sideEffect, ok = result is BackendResult.Success)
+        context.recordToolResult(
+            when (result) {
+                is BackendResult.Success -> ToolResult.Success(result.message)
+                is BackendResult.Failure -> ToolResult.Failure(result.message)
+            },
+        )
+        emit(RuntimeEvent.StepCompleted(index, step, result))
+        return when (result) {
+            is BackendResult.Success -> null
+            is BackendResult.Failure -> result.message
+        }
+    }
+
+    private fun buildResultMap(toolName: String, failure: String?, cancelled: Boolean): Map<String, Any?> =
+        when {
+            cancelled -> mapOf("cancelled" to true)
+            failure == null -> mapOf("ok" to true, "message" to "tool $toolName ran")
+            else -> mapOf("ok" to false, "error" to failure)
+        }
+
     /** Called by UI in response to [RuntimeEvent.GateRequested]. */
     suspend fun resume(decision: GateDecision) {
         val g = currentGate ?: error("AgentRuntime.resume called with no active turn")
         g.send(decision)
+    }
+
+    companion object {
+        const val STEP_CAP = 5
+        private const val CANCEL_SENTINEL = "__cancelled__"
+        private const val JNI_FAILURE_REASON = "I lost my train of thought. Mind sending that again?"
     }
 }

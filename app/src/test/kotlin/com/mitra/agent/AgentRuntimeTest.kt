@@ -168,4 +168,31 @@ class AgentRuntimeTest {
             assertTrue("Reversible must not pause on a gate in V1", events.none { it is RuntimeEvent.GateRequested })
             assertTrue(events.last() is RuntimeEvent.Done)
         }
+
+    @Test
+    fun `agentic loop runs two-step chain end to end`() =
+        runBlocking {
+            val brain =
+                com.mitra.inference.FakeBrain.script(
+                    com.mitra.inference.FakeBrain.leg("") { tool("set_dnd", mapOf("on" to true)) },
+                    com.mitra.inference.FakeBrain.leg("") { tool("set_ringer_mode", mapOf("mode" to "silent")) },
+                    com.mitra.inference.FakeBrain.leg("silent."),
+                )
+            val backend = StubBackend()
+            val rt =
+                AgentRuntime(
+                    brain = brain,
+                    parser = fixedParser(null),
+                    sideEffectOf = { SideEffect.Reversible },
+                    backends = listOf(backend),
+                    context = TurnOnlyContextStore { 0L },
+                    audit = AuditLog(),
+                )
+            val events = rt.run(UserUtterance("quiet for meeting", "test")).toList()
+            assertEquals(2, backend.dispatches.size)
+            assertEquals("set_dnd", backend.dispatches[0].name)
+            assertEquals("set_ringer_mode", backend.dispatches[1].name)
+            val done = events.last() as RuntimeEvent.Done
+            assertEquals("silent.", done.summary)
+        }
 }
