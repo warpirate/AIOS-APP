@@ -195,4 +195,125 @@ class AgentRuntimeTest {
             val done = events.last() as RuntimeEvent.Done
             assertEquals("silent.", done.summary)
         }
+
+    @Test
+    fun `agentic loop - user cancels Irreversible step, brain receives cancelled=true`() =
+        runBlocking {
+            val brain =
+                com.mitra.inference.FakeBrain.script(
+                    com.mitra.inference.FakeBrain.leg("") {
+                        tool("send_sms", mapOf("name" to "blanta", "body" to "hi"))
+                    },
+                    com.mitra.inference.FakeBrain.leg("okay, didn't send."),
+                )
+            val backend = StubBackend()
+            val rt =
+                AgentRuntime(
+                    brain = brain,
+                    parser = fixedParser(null),
+                    sideEffectOf = { SideEffect.Irreversible },
+                    backends = listOf(backend),
+                    context = TurnOnlyContextStore { 0L },
+                    audit = AuditLog(),
+                )
+            val collected = mutableListOf<RuntimeEvent>()
+            val job = launch { rt.run(UserUtterance("text blanta hi", "test")).collect { collected += it } }
+            while (collected.none { it is RuntimeEvent.GateRequested }) {
+                delay(1)
+            }
+            rt.resume(GateDecision.Cancel)
+            job.join()
+            assertEquals(0, backend.dispatches.size)
+            assertEquals(1, brain.sentResults.size)
+            assertEquals("send_sms", brain.sentResults[0].first)
+            assertEquals(true, brain.sentResults[0].second["cancelled"])
+            val done = collected.last() as RuntimeEvent.Done
+            assertEquals("okay, didn't send.", done.summary)
+        }
+
+    @Test
+    fun `agentic loop - tool failure is fed back, brain emits final text instead of retrying`() =
+        runBlocking {
+            val brain =
+                com.mitra.inference.FakeBrain.script(
+                    com.mitra.inference.FakeBrain.leg("") { tool("make_call", mapOf("name" to "ambiguous")) },
+                    com.mitra.inference.FakeBrain.leg("which one — mom (mobile) or mom (work)?"),
+                )
+            val backend = StubBackend(BackendResult.Failure("multiple matches for 'ambiguous'"))
+            val rt =
+                AgentRuntime(
+                    brain = brain,
+                    parser = fixedParser(null),
+                    sideEffectOf = { SideEffect.Reversible },
+                    backends = listOf(backend),
+                    context = TurnOnlyContextStore { 0L },
+                    audit = AuditLog(),
+                )
+            val events = rt.run(UserUtterance("call mom", "test")).toList()
+            assertEquals(1, backend.dispatches.size)
+            assertEquals(1, brain.sentResults.size)
+            assertEquals(false, brain.sentResults[0].second["ok"])
+            assertEquals("multiple matches for 'ambiguous'", brain.sentResults[0].second["error"])
+            val done = events.last() as RuntimeEvent.Done
+            assertEquals("which one — mom (mobile) or mom (work)?", done.summary)
+        }
+
+    @Test
+    fun `agentic loop - step cap stops a runaway brain`() =
+        runBlocking {
+            val legs =
+                (1..6).map {
+                    com.mitra.inference.FakeBrain.leg("") { tool("toggle_flashlight", mapOf("on" to true)) }
+                }
+            val brain = com.mitra.inference.FakeBrain(legs.toMutableList())
+            val backend = StubBackend()
+            val rt =
+                AgentRuntime(
+                    brain = brain,
+                    parser = fixedParser(null),
+                    sideEffectOf = { SideEffect.Reversible },
+                    backends = listOf(backend),
+                    context = TurnOnlyContextStore { 0L },
+                    audit = AuditLog(),
+                )
+            val events = rt.run(UserUtterance("spam flashlight", "test")).toList()
+            assertEquals(AgentRuntime.STEP_CAP, backend.dispatches.size)
+            val last = events.last()
+            assertTrue(last is RuntimeEvent.Failed)
+            assertEquals(
+                "hit the tool limit — let me know what else you need",
+                (last as RuntimeEvent.Failed).reason,
+            )
+        }
+
+    @Test
+    fun `agentic loop - brain throws on first chatStream surfaces friendly Failed`() =
+        runBlocking {
+            val brain =
+                object : com.mitra.inference.Brain {
+                    override fun chatStream(userText: String) =
+                        kotlinx.coroutines.flow.flow<com.mitra.inference.BrainTurn> {
+                            throw RuntimeException("simulated LiteRtLmJniException")
+                        }
+
+                    override fun sendToolResult(toolName: String, result: Map<String, Any?>) =
+                        kotlinx.coroutines.flow.flow<com.mitra.inference.BrainTurn> { }
+                }
+            val rt =
+                AgentRuntime(
+                    brain = brain,
+                    parser = fixedParser(null),
+                    sideEffectOf = { SideEffect.Reversible },
+                    backends = listOf(StubBackend()),
+                    context = TurnOnlyContextStore { 0L },
+                    audit = AuditLog(),
+                )
+            val events = rt.run(UserUtterance("hi", "test")).toList()
+            val last = events.last()
+            assertTrue(last is RuntimeEvent.Failed)
+            assertEquals(
+                "I lost my train of thought. Mind sending that again?",
+                (last as RuntimeEvent.Failed).reason,
+            )
+        }
 }
