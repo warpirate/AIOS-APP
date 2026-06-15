@@ -19,7 +19,7 @@ interface Router {
  * detect the common phrasings here and act instantly. Anything this doesn't match falls through to
  * the LLM for plain conversation.
  */
-class IntentParser : Router {
+open class IntentParser : Router {
     override fun route(input: String): ToolCall? {
         val t = input.lowercase().trim()
 
