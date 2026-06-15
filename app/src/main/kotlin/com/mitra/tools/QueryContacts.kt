@@ -1,10 +1,8 @@
 package com.mitra.tools
 
+import android.Manifest
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.provider.ContactsContract
-import android.provider.Settings
 import com.mitra.permissions.Permissions
 
 /**
@@ -30,10 +28,8 @@ class QueryContacts(
         val name = argString(args["name"]) ?: return ToolResult.Failure("I need a name to search for")
 
         if (!Permissions.hasReadContacts(context)) {
-            bounceToAppPermissions()
-            return ToolResult.Failure(
-                "Grant Mitra Contacts permission on the page I just opened, then ask again",
-            )
+            // ChatScreen catches this sentinel and launches the in-app RequestPermission dialog.
+            return ToolResult.Failure("__NEED_PERM__:${Manifest.permission.READ_CONTACTS}")
         }
 
         return try {
@@ -169,14 +165,6 @@ class QueryContacts(
                 "• ${c.displayName} — " + phones.joinToString(", ") { "${it.typeLabel} ${it.number}" }
             }
         return "$header\n$body"
-    }
-
-    private fun bounceToAppPermissions() {
-        val intent =
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                .setData(Uri.parse("package:${context.packageName}"))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { context.startActivity(intent) }
     }
 
     companion object {

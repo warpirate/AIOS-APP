@@ -52,6 +52,15 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
 
     <!--
+      Send SMS directly via SmsManager.sendTextMessage for send_sms. Without this, Mitra cannot
+      text without falling back to ACTION_SENDTO (open the messages app pre-filled) — and we
+      explicitly do not keep that fallback. With this granted, the SMS fires after the in-app
+      ConfirmationGate modal — Mitra never auto-sends silently. Runtime permission; user grants
+      reactively on the first "text X" attempt or proactively via Settings -> View all permissions.
+    -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+
+    <!--
       Android 11+ package visibility. Without these the system clock app is invisible to our
       PackageManager probes (StartTimer falls through to its last-resort path on every device),
       and launcher app discovery (open_app) returns an empty list.

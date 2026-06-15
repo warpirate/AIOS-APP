@@ -2,6 +2,8 @@ package com.mitra.ui
 
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -176,6 +178,71 @@ fun ChatScreen(
     // The runtime that is currently mid-turn (used to resume gate decisions). Null between turns.
     var activeRuntime by remember { mutableStateOf<AgentRuntime?>(null) }
 
+    // In-app permission flow. When a tool returns the __NEED_PERM__ sentinel we hold the perm
+    // name + the user's original utterance + the action card id. A LaunchedEffect keyed on the
+    // perm fires the system RequestPermission dialog. The launcher callback either auto-retries
+    // the user's last utterance (on grant via [pendingAutoSend]) or surfaces a denied-state card
+    // (on deny). Permanent deny (rationale=false after a deny) bounces to the app-settings page
+    // as a last resort. We use pendingAutoSend rather than calling send() directly so the
+    // launcher callback does not need to forward-reference send (Kotlin local-fn scoping).
+    var pendingPermission by remember { mutableStateOf<String?>(null) }
+    var pendingRetryText by remember { mutableStateOf<String?>(null) }
+    var pendingCardId by remember { mutableStateOf<Int?>(null) }
+    var pendingAutoSend by remember { mutableStateOf<String?>(null) }
+
+    val permLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val perm = pendingPermission
+            val retry = pendingRetryText
+            val cardId = pendingCardId
+            pendingPermission = null
+            pendingRetryText = null
+            pendingCardId = null
+            if (perm == null) return@rememberLauncherForActivityResult
+
+            if (granted) {
+                // Drop the placeholder "asking permission" card and queue the retry.
+                cardId?.let { id ->
+                    val i = items.indexOfFirst { it is ActionCard && it.id == id }
+                    if (i >= 0) items.removeAt(i)
+                }
+                retry?.let { pendingAutoSend = it }
+            } else {
+                val activity = context as? android.app.Activity
+                val rationale =
+                    activity?.let {
+                        androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(it, perm)
+                    } ?: false
+                val msg =
+                    if (rationale) {
+                        "Permission needed. Try again and tap Allow."
+                    } else {
+                        "Permission denied. Opening Settings — enable it there."
+                    }
+                cardId?.let { id ->
+                    val i = items.indexOfFirst { it is ActionCard && it.id == id }
+                    if (i >= 0) {
+                        val card = items[i] as ActionCard
+                        items[i] = card.copy(state = ActionState.FAILED, detail = msg)
+                    }
+                }
+                if (!rationale) {
+                    // Permanent-deny path: system dialog will no longer appear. The user must
+                    // toggle the permission on the app-settings page; bouncing them there is the
+                    // only remaining surface.
+                    val intent =
+                        android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                            .setData(android.net.Uri.parse("package:${context.packageName}"))
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    runCatching { context.startActivity(intent) }
+                }
+            }
+        }
+
+    LaunchedEffect(pendingPermission) {
+        pendingPermission?.let { permLauncher.launch(it) }
+    }
+
     LaunchedEffect(items.size) {
         if (items.isNotEmpty()) listState.animateScrollToItem(items.size - 1)
     }
@@ -281,15 +348,38 @@ fun ChatScreen(
                     }
                     is RuntimeEvent.StepCompleted -> {
                         val id = lastCardId ?: return@collect
-                        finishCard(
-                            id = id,
-                            success = event.result is com.mitra.automation.BackendResult.Success,
-                            detail =
-                                when (val r = event.result) {
-                                    is com.mitra.automation.BackendResult.Success -> r.message
-                                    is com.mitra.automation.BackendResult.Failure -> r.message
-                                },
-                        )
+                        val r = event.result
+                        if (r is com.mitra.automation.BackendResult.Failure &&
+                            r.message.startsWith("__NEED_PERM__:")
+                        ) {
+                            // Tool needs a runtime permission. Park the card in RUNNING with a
+                            // friendly message, capture the original utterance + card id, and
+                            // surface the system permission dialog in-app. The Failed event that
+                            // follows from AgentRuntime is silently consumed below (lastCardId
+                            // is non-null so the Failed branch's MitraMsg fallback never fires).
+                            val perm = r.message.removePrefix("__NEED_PERM__:")
+                            val i = items.indexOfFirst { it is ActionCard && it.id == id }
+                            if (i >= 0) {
+                                val card = items[i] as ActionCard
+                                items[i] = card.copy(
+                                    state = ActionState.RUNNING,
+                                    detail = "Asking for permission…",
+                                )
+                            }
+                            pendingRetryText = text
+                            pendingCardId = id
+                            pendingPermission = perm
+                        } else {
+                            finishCard(
+                                id = id,
+                                success = r is com.mitra.automation.BackendResult.Success,
+                                detail =
+                                    when (r) {
+                                        is com.mitra.automation.BackendResult.Success -> r.message
+                                        is com.mitra.automation.BackendResult.Failure -> r.message
+                                    },
+                            )
+                        }
                     }
                     is RuntimeEvent.Done -> {
                         if (lastCardId == null && msgIdx < items.size) {
@@ -315,6 +405,17 @@ fun ChatScreen(
             }
             activeRuntime = null
             busy = false
+        }
+    }
+
+    // Auto-retry after an in-app permission grant. The launcher callback sets pendingAutoSend;
+    // this effect picks it up and re-dispatches the original utterance via send(), which re-runs
+    // the brain on a fresh turn with the permission now in place.
+    LaunchedEffect(pendingAutoSend) {
+        val t = pendingAutoSend
+        if (t != null) {
+            pendingAutoSend = null
+            send(t)
         }
     }
 
@@ -364,6 +465,9 @@ private fun actionTitle(call: ToolCall): String =
         "set_auto_rotate" -> if (call.args["on"] == false) "Turn auto-rotate off" else "Turn auto-rotate on"
         "set_screen_timeout" -> "Set screen timeout"
         "set_bluetooth" -> if (call.args["on"] == false) "Turn Bluetooth off" else "Turn Bluetooth on"
+        "make_call" -> "Place call"
+        "send_sms" -> "Send text"
+        "query_contacts" -> "Look up contact"
         else -> call.name.replace('_', ' ').replaceFirstChar { it.uppercase() }
     }
 
@@ -423,6 +527,20 @@ private fun actionDetail(call: ToolCall, context: android.content.Context): Stri
                     (call.args["number"] as? String).orEmpty()
                 }
         }
+        "send_sms" -> {
+            // Same idea as make_call but with body — the confirm card must show "Blanta — +91 …
+            // · on my way" so the user can verify exactly what is about to leave the device.
+            val preview = runCatching { com.mitra.tools.SendSms(context).previewFor(call.args) }.getOrNull()
+            preview
+                ?: buildString {
+                    val who = (call.args["name"] as? String).orEmpty()
+                        .ifBlank { (call.args["number"] as? String).orEmpty() }
+                    val body = (call.args["body"] as? String).orEmpty()
+                    if (who.isNotBlank()) append(who)
+                    if (who.isNotBlank() && body.isNotBlank()) append(" · ")
+                    if (body.isNotBlank()) append(body)
+                }
+        }
         // Title already speaks for these — no detail needed.
         "toggle_flashlight", "set_dnd", "set_auto_rotate", "set_bluetooth" -> ""
         else -> ""
@@ -445,6 +563,7 @@ private fun toolIcon(name: String): ImageVector =
         "set_bluetooth" -> Icons.Filled.Bluetooth
         "query_contacts" -> Icons.Filled.Search
         "make_call" -> Icons.Filled.Phone
+        "send_sms" -> Icons.Filled.Send
         else -> Icons.Outlined.Bolt
     }
 

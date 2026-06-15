@@ -138,6 +138,21 @@ class LiteRtBrain(
                 description = "the phone number the user said, digits only or with + and spaces. Use this when the user gave digits like '9876543210' or '+91 98765 43210'. Leave empty when the user gave a name.",
             ) number: String,
         ): Map<String, Any> = mapOf("ok" to true)
+
+        @Tool(
+            description = "Use this ONLY when the user explicitly says 'text X', 'message X', 'sms X', 'send X a message', or 'tell X that ...' where X is a contact name OR a phone number AND the user supplied the message body (e.g. 'text mom on my way', 'message Priya I'll be late', 'sms 9876543210 hey'). Pass the recipient EXACTLY as the user wrote it; pass the message body verbatim. Do NOT call this for 'open the messages app', 'check my texts', or any read/open request — those use open_app. Do NOT call this if the user did not say what message to send.",
+        )
+        fun send_sms(
+            @ToolParam(
+                description = "the contact name the user said, byte-for-byte. Use this when the user gave a name like 'mom' or 'Priya'. Leave empty when the user gave only digits.",
+            ) name: String,
+            @ToolParam(
+                description = "the phone number the user said, digits only or with + and spaces. Use this when the user gave digits. Leave empty when the user gave a name.",
+            ) number: String,
+            @ToolParam(
+                description = "the exact message text the user wants sent, byte-for-byte. Strip the verb + recipient (so 'text mom on my way' has body 'on my way'). Never paraphrase or summarise the body.",
+            ) body: String,
+        ): Map<String, Any> = mapOf("ok" to true)
         // Real execution is dispatched by AgentLoop -> ToolRegistry, not here.
     }
 
@@ -172,7 +187,7 @@ class LiteRtBrain(
 
                         NEVER NARRATE FAKE ACTIONS. Do not write "You have found X", "Done", "Called X", "Opened X", "Set X" unless you actually emitted the matching tool call this turn. If you did not call the tool, say what is needed (e.g. "I cannot call yet — Mitra needs the call_phone permission" or "Try saying 'call Blanta' with the explicit verb"). Honest > confident-sounding.
 
-                        CALL / SMS — "call X" means dial X via the make_call tool. "Text X" / "message X" / "send X a message" will use send_sms when it ships. Both treat X as either a contact name OR a phone number; pass it through unchanged to the tool's name OR number argument as you see it.
+                        CALL / SMS — "call X" means dial X via the make_call tool. "Text X" / "message X" / "send X a message <body>" / "tell X <body>" uses send_sms — emit it ONLY when the user supplied an actual message body in the same utterance. If they only said "text mom" with no body, ask "what should I say?" in chat instead of emitting a tool call with an empty body. Both call/sms tools treat X as either a contact name OR a phone number; pass it through unchanged to the tool's name OR number argument as you see it.
                         """.trimIndent(),
                     ),
                 samplerConfig = SamplerConfig(temperature = 0.3, topK = 20, topP = 0.95),

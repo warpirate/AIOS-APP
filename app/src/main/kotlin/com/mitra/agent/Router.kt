@@ -55,6 +55,21 @@ class IntentParser : Router {
             }
         }
 
+        // SMS — "text mom on my way", "message Priya I'll be late", "sms 9876543210 hey".
+        // The recipient is the first whitespace-separated token after the verb (so "Priya
+        // Sharma" only captures "Priya" — but that matches MakeCall's resolver bias toward
+        // first-name resolution; the user can always retype with the full name). The body is
+        // the rest of the line. Reject if body is empty or only fillers.
+        Regex("""^(?:text|message|msg|sms)\s+(\S+)\s+(.+)""").find(t)?.let { m ->
+            val recipientRaw = m.groupValues[1].trim()
+            val body = m.groupValues[2].trim().trimEnd('.', '!', '?', ',')
+            if (body.isBlank()) return@let
+            val recipient = recipientRaw.trim('.', ',', '!', '?')
+            val args = mutableMapOf<String, Any?>("body" to body)
+            if (looksLikeNumber(recipient)) args["number"] = recipient else args["name"] = recipient
+            return ToolCall("send_sms", args)
+        }
+
         // Real-API tools BEFORE the panel resolver. Each requires an explicit on/off verb so a
         // bare noun ("bluetooth?", "dnd") still falls through to the panel resolver below.
         explicitToggle(t, listOf("dnd", "do not disturb", "zen mode"))?.let {

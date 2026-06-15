@@ -35,6 +35,7 @@ enum class Permission(
     BLUETOOTH_CONNECT("bluetooth_connect"),
     READ_CONTACTS("read_contacts", isOnboarding = false),
     CALL_PHONE("call_phone", isOnboarding = false),
+    SEND_SMS("send_sms", isOnboarding = false),
 }
 
 data class PermissionStatus(
@@ -63,6 +64,7 @@ object Permissions {
                     PermissionStatus(Permission.BLUETOOTH_CONNECT, isBluetoothConnectGranted(context)),
                     PermissionStatus(Permission.READ_CONTACTS, isReadContactsGranted(context)),
                     PermissionStatus(Permission.CALL_PHONE, isCallPhoneGranted(context)),
+                    PermissionStatus(Permission.SEND_SMS, isSendSmsGranted(context)),
                 ),
         )
 
@@ -71,6 +73,9 @@ object Permissions {
 
     /** Public accessor used by [com.mitra.tools.MakeCall] to gate ACTION_CALL on the runtime grant. */
     fun hasCallPhone(context: Context): Boolean = isCallPhoneGranted(context)
+
+    /** Public accessor used by [com.mitra.tools.SendSms] to gate SmsManager.sendTextMessage on the runtime grant. */
+    fun hasSendSms(context: Context): Boolean = isSendSmsGranted(context)
 
     fun launchGrant(context: Context, permission: Permission) {
         when (permission) {
@@ -88,6 +93,7 @@ object Permissions {
             Permission.BLUETOOTH_CONNECT -> Unit // requested via ActivityResult in the Composable
             Permission.READ_CONTACTS -> Unit // requested via ActivityResult in the Composable
             Permission.CALL_PHONE -> Unit // requested via ActivityResult in the Composable
+            Permission.SEND_SMS -> Unit // requested via ActivityResult in the Composable
         }
     }
 
@@ -97,6 +103,7 @@ object Permissions {
             Permission.BLUETOOTH_CONNECT -> Manifest.permission.BLUETOOTH_CONNECT
             Permission.READ_CONTACTS -> Manifest.permission.READ_CONTACTS
             Permission.CALL_PHONE -> Manifest.permission.CALL_PHONE
+            Permission.SEND_SMS -> Manifest.permission.SEND_SMS
             else -> null
         }
 
@@ -125,5 +132,9 @@ object Permissions {
 
     private fun isCallPhoneGranted(context: Context): Boolean =
         context.checkSelfPermission(Manifest.permission.CALL_PHONE) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun isSendSmsGranted(context: Context): Boolean =
+        context.checkSelfPermission(Manifest.permission.SEND_SMS) ==
             PackageManager.PERMISSION_GRANTED
 }

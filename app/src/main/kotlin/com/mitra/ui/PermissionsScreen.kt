@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -427,6 +428,7 @@ private fun iconFor(p: Permission): ImageVector =
         Permission.BLUETOOTH_CONNECT -> Icons.Filled.Bluetooth
         Permission.READ_CONTACTS -> Icons.Filled.Contacts
         Permission.CALL_PHONE -> Icons.Filled.Phone
+        Permission.SEND_SMS -> Icons.Filled.Sms
     }
 
 private fun titleFor(p: Permission): String =
@@ -436,6 +438,7 @@ private fun titleFor(p: Permission): String =
         Permission.BLUETOOTH_CONNECT -> "Switch Bluetooth on and off"
         Permission.READ_CONTACTS -> "Find contacts"
         Permission.CALL_PHONE -> "Place calls"
+        Permission.SEND_SMS -> "Send text messages"
     }
 
 private fun whyFor(p: Permission): String =
@@ -450,6 +453,8 @@ private fun whyFor(p: Permission): String =
             "Mitra looks up phone numbers when you ask. Without this, name lookups won't work."
         Permission.CALL_PHONE ->
             "Mitra places calls from inside the app when you say 'call X'. Every call is shown for confirm before it dials."
+        Permission.SEND_SMS ->
+            "Mitra sends texts directly when you say 'text X <message>'. Every message is shown for confirm before it sends, and SMS counts toward your carrier plan."
     }
 
 @Composable
@@ -466,6 +471,10 @@ private fun PermissionPreview(perm: Permission) {
             }
             Permission.CALL_PHONE -> {
                 IconPreviewPlaceholder(icon = Icons.Filled.Phone)
+                return
+            }
+            Permission.SEND_SMS -> {
+                IconPreviewPlaceholder(icon = Icons.Filled.Sms)
                 return
             }
         }
