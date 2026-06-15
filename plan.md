@@ -59,19 +59,19 @@ Build the V1 tool list. Each tool is one PR, fully tested, with a clear "Use thi
 **Hardware:**
 - [x] `toggle_flashlight` — LLM-driven, verified on device
 - [ ] `set_wifi`
-- [ ] `set_bluetooth`
-- [ ] `set_dnd`
-- [ ] `set_mobile_data`
-- [ ] `set_airplane_mode`
+- [x] `set_bluetooth` — direct toggle via BluetoothAdapter on API 30-, opens BT page on API 33+ (system restriction). `BLUETOOTH_CONNECT` runtime perm.
+- [x] `set_dnd` — direct toggle via NotificationManager; `ACCESS_NOTIFICATION_POLICY` special perm bounce on first use.
+- [ ] `set_mobile_data` — system-restricted; landing as `open_settings(mobile_data)` only.
+- [ ] `set_airplane_mode` — system-restricted; `open_settings(airplane)` only.
 
 **Display:**
 - [x] `set_brightness` — Reversible; WRITE_SETTINGS grant flow bounces user to system page on first call
-- [ ] `set_auto_rotate`
-- [ ] `set_screen_timeout`
+- [x] `set_auto_rotate` — Reversible via `Settings.System.ACCELEROMETER_ROTATION` (needs WRITE_SETTINGS).
+- [x] `set_screen_timeout` — Reversible via `Settings.System.SCREEN_OFF_TIMEOUT` (needs WRITE_SETTINGS).
 
 **Audio:**
 - [x] `set_volume` — media stream done (`set_media_volume`); other streams TODO
-- [ ] `set_ringer_mode`
+- [x] `set_ringer_mode` — direct toggle via AudioManager; silent mode requires `ACCESS_NOTIFICATION_POLICY` on API 24+.
 - [ ] `mute_all`
 
 **Time:**
@@ -83,12 +83,12 @@ Build the V1 tool list. Each tool is one PR, fully tested, with a clear "Use thi
 
 **Apps & navigation:**
 - [x] `open_app(name|package_name)` — PackageManager fuzzy match (exact pkg → exact label → prefix → substring)
-- [x] `open_url(url)` — via ACTION_VIEW (was `deep_link`)
-- [ ] `open_settings(panel)`
+- [x] `open_url(url)` — via ACTION_VIEW. 2026-06-15: defensive URL validator added — refuses non-URL chat text ("lumos maximus") so the brain can't auto-open a junk URL.
+- [x] `open_settings(panel)` — opens system settings page for the named panel; covers bluetooth, wifi, dnd, airplane, mobile_data, brightness, sound, display, location, battery, apps, storage.
 
 **Telephony:**
-- [ ] `make_call` (gated by ConfirmationGate)
-- [ ] `send_sms` (gated)
+- [x] `make_call` (gated by ConfirmationGate) — shipped 2026-06-15. ACTION_CALL direct dial behind Irreversible gate; CALL_PHONE runtime perm with in-app grant dialog. Confirm card shows "Blanta — +91 76718 90230" preview.
+- [x] `send_sms` (gated) — shipped 2026-06-15. SmsManager direct send behind Irreversible gate; SEND_SMS runtime perm with in-app grant dialog. Multipart split for >160 char bodies. Body composition currently verbatim — full intent-to-body composition lands with the P1 agentic-loop work below.
 
 **Device state reads:**
 - [ ] `get_battery`
@@ -118,6 +118,26 @@ Each tool ships with: implementation + side-effect classification + a "Use this 
 - [ ] Debug-only audit history screen reading `agent.auditEntries()`
 
 **Exit:** structurally impossible for the LLM to fire an irreversible action without the gate's involvement, verified by a passing integration test that tries to bypass it.
+
+---
+
+### M2.5 — Agentic Loop (Week 5–7, parallel with M2)
+
+The V1 brain is single-shot: emit ONE tool call per turn, dispatch, done. M2.5 replaces that with a multi-step agentic loop within a single turn — brain reasons → emits tool → dispatcher runs → feeds result back via `Content.ToolResponse` → brain reasons again → repeat (cap 5 steps) → final reply. Unlocks intent-to-body composition (the user's biggest UX complaint after `send_sms` shipped on 2026-06-15: brain copied the user's instruction verbatim into the SMS body), tool chaining ("text mom and turn on dnd"), and mid-turn reflection on failure (call mom → 3 Moms found → ask which).
+
+Spec: [docs/superpowers/specs/2026-06-15-agentic-loop-design.md](docs/superpowers/specs/2026-06-15-agentic-loop-design.md).
+
+- [ ] `LiteRtBrain.sendToolResult(name, resultMap)` — pushes `Content.ToolResponse` into the conversation, returns next streaming `Flow<BrainTurn>`
+- [ ] Rework `AgentRuntime` to own the agentic loop directly; delete `SingleShotPlanner`; keep `IntentParser` shortcut as the deterministic pre-brain path
+- [ ] System prompt: new `COMPOSE` / `TONE` / `AGENTIC` sections (draft body from intent, mirror user mood in 1 clause, reason about tool results)
+- [ ] `send_sms.body` description rewritten so the brain drafts the body, not copies user words verbatim
+- [ ] Step cap = 5; cancel-from-confirm feeds `{"cancelled": true}` to brain
+- [ ] Unit tests: chain success, cancel mid-chain, fail-then-replan, step-cap hit, JNI error path
+- [ ] Manual on-device test of 8 scenarios from the brainstorm session (compose, chain, multi-tool, fail+reflect within turn, tone, alarm-with-label, ringer+dnd combo)
+
+**Exit:** brain handles multi-step turns with composition + tone; the 8 manual scenarios pass on the dev device; `AgentRuntimeTest` covers the chain / cancel / replan / cap / JNI-error paths.
+
+**P2 (separate spec, not M2.5):** cross-turn referent ("text her" after "what's her number"), proactive pre-tool clarification ("text the boss" → "who's the boss?"). These need a ContextStore that survives `endTurn` and a "should I ask before emitting?" rule in the system prompt — both deferred.
 
 ---
 
@@ -188,7 +208,7 @@ Start of V2 tier. Highest-risk phase; expect rework.
 - [ ] **Reply path via `RemoteInput`** (NotificationListenerService inline reply) — the fast, no-UI default for replying to incoming messages in any app
 - [ ] Gesture execution via `dispatchGesture` (tap, long-press, swipe, scroll) — tier-4 fallback only
 - [ ] Text injection into focused fields — tier-4 fallback; prefer `RemoteInput` reply where a notification exists
-- [ ] First target app: WhatsApp — **reply to last message via `RemoteInput`** (seamless); new-outbound via deep-link pre-fill; accessibility only when neither works
+- [ ] First target app: WhatsApp — **Gemini-parity send UX** (confirm card in chat → silent send → WhatsApp UI never opens). Per 2026-06-15 web research, Gemini does this with AccessibilityService driving WhatsApp UI invisibly. We follow the same pattern. Layered: (a) `RemoteInput` for replies to recent incoming messages — silent + robust against WhatsApp UI updates; (b) accessibility-driven type-and-send for first-message-send where no notification exists; (c) deep-link `wa.me` prefill kept as a last-resort fallback only. Tier 0 / pure-deep-link is NOT a goal — the user explicitly asked for confirm-then-silent UX matching Gemini.
 - [ ] Second target app: Swiggy or Zomato (search + display results)
 - [ ] Multi-step planner using Gemma 4 E2B
 - [ ] Per-app reliability dashboard
@@ -224,15 +244,16 @@ Mirrored from `docs/risks.md`. Highest-priority three only:
 
 ## Right-now tasks
 
-Updated 2026-06-05. M0 skeleton landed (Gemma 4 E2B + LiteRT-LM CPU + 5 tools end-to-end). Focus now is closing M0 loose ends and shipping M2 safety in parallel with the remaining M1 tools — `make_call` / `send_sms` cannot land before the gate exists.
+Updated 2026-06-15. M1 tool surface effectively complete: all V1 device-control + telephony tools shipped (`toggle_flashlight`, `set_alarm`, `start_timer`, `open_url`, `open_app`, `open_settings`, `query_contacts`, `make_call`, `send_sms`, `set_media_volume`, `set_brightness`, `set_dnd`, `set_ringer_mode`, `set_auto_rotate`, `set_screen_timeout`, `set_bluetooth`). Focus shifts to making the brain *agentic* (M2.5) and laying the AutomationBackend seam (M5.5) before the AccessibilityService work in M6.
 
-1. **M2 safety landed (in-flight):** `safety/ConfirmationGate.kt` + `safety/AuditLog.kt` + JUnit coverage exist. Next: wire AuditLog into a debug-only history screen behind a dev flag.
-2. **Fix `start_timer` on OnePlus Nord 2T** — `ACTION_SET_TIMER` returns "no clock app". Add Google Clock package fallback, then a `setExactAndAllowWhileIdle` in-app timer as the last resort.
-3. **Ship M1 reversible tools** in dependency order: `set_brightness`, `set_volume(ring/notification)`, `set_dnd`, `open_app`, `open_settings(panel)`, `set_screen_timeout`. None of these need the gate to fire (Reversible runs with one Confirm).
-4. **Then ship M1 irreversibles** behind ConfirmationGate: `make_call`, `send_sms`. Mark both `SideEffect.Irreversible`.
-5. **CI + lint (M0 close-outs):** wire GitHub Actions `build + lint + unit test on push`. Add a minimal ktlint config; defer the custom privacy-invariant rules until M2 audit log is consumed by UI.
-6. **Pin SDK / NDK / AGP** + commit `.tool-versions`.
-7. **Hardware truth test** — still owed on a real SD7 Gen 2 / 6 GB device. Cold-start, warm p50/p95, sustained 10-call thermal point. Park results in `docs/research/`.
-8. ~~**Add `query_contacts`** (ContentResolver, read-only) — unblocks `make_call` / `send_sms` arg resolution.~~ Shipped 2026-06-11; see [docs/superpowers/specs/2026-06-11-query-contacts-design.md](docs/superpowers/specs/2026-06-11-query-contacts-design.md).
-9. **Sustainability bootstrap** — stranger-runnable CONTRIBUTING flow + NLnet NGI Zero application before next even-month deadline. (R-008)
-10. **Pick a public name** before the first public commit if `Mitra` isn't it.
+1. **Ship M2.5 agentic loop** — write the implementation plan from [docs/superpowers/specs/2026-06-15-agentic-loop-design.md](docs/superpowers/specs/2026-06-15-agentic-loop-design.md) and land it. Highest-leverage UX work right now; everything else (WhatsApp, scheduling, smart clarification) sits behind a brain that can chain + compose.
+2. **M2 safety landed (in-flight):** `safety/ConfirmationGate.kt` + `safety/AuditLog.kt` + JUnit coverage exist. Next: wire AuditLog into a debug-only history screen behind a dev flag.
+3. **Fix `start_timer` on OnePlus Nord 2T** — `ACTION_SET_TIMER` returns "no clock app". Add Google Clock package fallback, then a `setExactAndAllowWhileIdle` in-app timer as the last resort.
+4. **CI + lint (M0 close-outs):** wire GitHub Actions `build + lint + unit test on push`. Add a minimal ktlint config; defer the custom privacy-invariant rules until M2 audit log is consumed by UI.
+5. **Pin SDK / NDK / AGP** + commit `.tool-versions`.
+6. **Hardware truth test** — still owed on a real SD7 Gen 2 / 6 GB device. Cold-start, warm p50/p95, sustained 10-call thermal point. Park results in `docs/research/`.
+7. **P2 brain work (after M2.5 ships):** cross-turn `ContextStore` (turn 1 "what's blanta's number" → turn 2 "text her hi") + proactive pre-tool clarification ("text the boss" with no boss-contact → ask "who's the boss?"). Own design + plan.
+8. **WhatsApp Tier 1 path (post-M5.5 + M6):** the user wants Gemini-parity UX — confirm card → silent send → WhatsApp UI never opens. Per 2026-06-15 web research, that requires AccessibilityService for first-message-send (RemoteInput alone only covers replies). Lands as M6 milestone work; no shortcut available. Tier 0 deep-link prefill is explicitly NOT a goal — UX gap is too visible.
+9. ~~**Add `query_contacts`**~~ Shipped 2026-06-11; see [docs/superpowers/specs/2026-06-11-query-contacts-design.md](docs/superpowers/specs/2026-06-11-query-contacts-design.md).
+10. **Sustainability bootstrap** — stranger-runnable CONTRIBUTING flow + NLnet NGI Zero application before next even-month deadline. (R-008)
+11. **Pick a public name** before the first public commit if `Mitra` isn't it.
