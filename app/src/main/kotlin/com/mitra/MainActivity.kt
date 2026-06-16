@@ -11,14 +11,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.mitra.agent.AgentRuntime
 import com.mitra.agent.IntentParser
 import com.mitra.agent.TurnOnlyContextStore
 import com.mitra.automation.ManagerApiBackend
-import com.mitra.inference.LiteRtBrain
+import com.mitra.inference.Brain
+import com.mitra.inference.BrainHolder
 import com.mitra.inference.ModelDownloader
 import com.mitra.inference.ModelRegistry
 import com.mitra.permissions.Onboarding
@@ -37,9 +37,6 @@ import com.mitra.ui.SettingsScreen
 import com.mitra.ui.WelcomeScreen
 import com.mitra.ui.theme.MitraTheme
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 
 private enum class Phase { BOOT, WELCOME, DOWNLOAD, LOADING, PERMISSIONS, CHAT, SETTINGS, PERMISSIONS_REVIEW, ACTIVITY, ERROR }
@@ -63,15 +60,13 @@ class MainActivity : ComponentActivity() {
                 ConfirmationMode.BALANCED -> side == com.mitra.tools.SideEffect.Irreversible
             }
         }
-        // The runtime is constructed below once the brain is (or isn't) loaded — see AppRoot.
+        val brainHolder = (application as MitraApp).brainHolder
         val modelFile = File(applicationContext.getExternalFilesDir(null), ModelRegistry.MODEL_FILE)
-        val cacheDir = applicationContext.cacheDir.path
         setContent {
             MitraTheme {
                 AppRoot(
                     modelFile = modelFile,
-                    cacheDir = cacheDir,
-                    sideEffectOf = sideEffectOf,
+                    brainHolder = brainHolder,
                     auditEntries = { audit.entries() },
                     buildRuntime = { brain, _ ->
                         // ChatScreen reads streaming text from RuntimeEvent.Speaking; the legacy
@@ -96,15 +91,13 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun AppRoot(
     modelFile: File,
-    cacheDir: String,
-    sideEffectOf: (String) -> com.mitra.tools.SideEffect,
+    brainHolder: BrainHolder,
     auditEntries: () -> List<com.mitra.safety.AuditLog.Entry>,
-    buildRuntime: (LiteRtBrain?, (String) -> Unit) -> AgentRuntime,
+    buildRuntime: (Brain?, (String) -> Unit) -> AgentRuntime,
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    val warmupScope = rememberCoroutineScope()
     var phase by remember { mutableStateOf(Phase.BOOT) }
-    var brain by remember { mutableStateOf<LiteRtBrain?>(null) }
+    var brain by remember { mutableStateOf<Brain?>(null) }
 
     var downloaded by remember { mutableLongStateOf(0L) }
     var total by remember { mutableLongStateOf(0L) }
@@ -135,22 +128,11 @@ private fun AppRoot(
 
     LaunchedEffect(phase) {
         if (phase == Phase.LOADING) {
-            brain =
-                withContext(Dispatchers.IO) {
-                    try {
-                        LiteRtBrain(modelFile.absolutePath, cacheDir)
-                    } catch (t: Throwable) {
-                        null
-                    }
-                }
-            // Silent background warmup: pages model into RAM, compiles kernels, primes CPU caches.
-            // Runs while the user is on Permissions or Chat empty state. By the time they send their
-            // first message, the engine is hot. No loading-screen extension, no user-facing message.
-            brain?.let { b ->
-                warmupScope.launch(Dispatchers.IO) {
-                    runCatching { b.warmup() }
-                }
-            }
+            // Cover the freshly-downloaded path: MitraApp.onCreate skipped its eager prewarm
+            // because the model file didn't exist yet. Now it does, so kick construction off.
+            // On launches AFTER the first download completes, prewarm() is a no-op (single-flight).
+            brainHolder.prewarm()
+            brain = brainHolder.get()
             phase = if (Onboarding.isComplete(ctx)) Phase.CHAT else Phase.PERMISSIONS
         }
     }
@@ -184,7 +166,6 @@ private fun AppRoot(
             Box(modifier = Modifier.fillMaxSize()) {
                 ChatScreen(
                     brainReady = brain != null,
-                    isWarmingUp = { brain?.warmupComplete == false },
                     buildRuntime = { onChunk -> buildRuntime(brain, onChunk) },
                     onOpenSettings = { phase = Phase.SETTINGS },
                 )
