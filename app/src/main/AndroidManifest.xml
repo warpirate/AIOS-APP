@@ -92,6 +92,7 @@
     </queries>
 
     <application
+        android:name=".MitraApp"
         android:allowBackup="false"
         android:label="Mitra"
         android:supportsRtl="true"
