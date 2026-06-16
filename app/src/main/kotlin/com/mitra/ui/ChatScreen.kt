@@ -146,10 +146,6 @@ private data class Suggestion(
 @Composable
 fun ChatScreen(
     brainReady: Boolean,
-    /** Returns true while the brain's background warmup is still running. Polled cheaply each
-     *  recomposition. Surfaced as a calm hint on the input bar so the user doesn't blame Mitra
-     *  for a cold first-token cost they didn't initiate. */
-    isWarmingUp: () -> Boolean = { false },
     buildRuntime: (onChunk: (String) -> Unit) -> AgentRuntime,
     onOpenSettings: () -> Unit = {},
 ) {
@@ -163,17 +159,6 @@ fun ChatScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val tts = remember { TtsReader(context) }
     DisposableEffect(Unit) { onDispose { tts.shutdown() } }
-
-    // Poll the brain's warmup state until it completes. The flag is a Volatile var that Compose
-    // can't subscribe to natively, so we mirror it into a State<Boolean> and stop polling once
-    // it flips. 400ms is well under the cost of being wrong about the hint's visibility.
-    var warming by remember { mutableStateOf(isWarmingUp()) }
-    LaunchedEffect(Unit) {
-        while (warming) {
-            kotlinx.coroutines.delay(400)
-            warming = isWarmingUp()
-        }
-    }
 
     // TTS opt-in. Re-read on every ON_RESUME so toggling the Settings switch and returning to chat
     // takes effect immediately (Settings is a different Compose screen pushed over the same activity).
@@ -560,33 +545,7 @@ fun ChatScreen(
                     }
                 }
             }
-            if (warming) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    androidx.compose.material3.CircularProgressIndicator(
-                        modifier = Modifier.size(12.dp),
-                        strokeWidth = 1.5.dp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.size(8.dp))
-                    Text(
-                        "Warming up the brain — first message will take a few seconds.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            // Disable send while warming — LiteRT-LM serializes per-Conversation, so a user
-            // message during the warmup turn would either queue silently (looks frozen) or
-            // collide with the prefill. Better to make the wait honest.
-            FloatingInputBar(
-                value = input,
-                onValueChange = { input = it },
-                onSend = { send() },
-                enabled = !busy && !warming,
-            )
+            FloatingInputBar(value = input, onValueChange = { input = it }, onSend = { send() }, enabled = !busy)
             Spacer(Modifier.size(8.dp))
         }
     }
