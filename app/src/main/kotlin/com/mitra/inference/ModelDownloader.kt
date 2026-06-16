@@ -8,6 +8,7 @@ import java.io.IOException
 import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import kotlin.coroutines.coroutineContext
 
 /**
@@ -16,9 +17,16 @@ import kotlin.coroutines.coroutineContext
  *
  * Pause = cancel the calling coroutine; the partial `.part` file is kept. Resume = call [download]
  * again; it continues from where it stopped via an HTTP Range request.
+ *
+ * Post-download integrity: when [expectedSizeBytes] and [expectedSha256] are non-zero / non-blank,
+ * the renamed [dest] is size- and SHA-256-verified. Mismatch deletes the file and throws so the
+ * caller can surface a clean retry path instead of letting [LiteRtBrain] crash later on bad bytes.
+ * The default constructor pulls pins from [ModelRegistry]; pass empty values in tests to opt out.
  */
 class ModelDownloader(
     private val dest: File,
+    private val expectedSizeBytes: Long = ModelRegistry.EXPECTED_SIZE_BYTES,
+    private val expectedSha256: String = ModelRegistry.EXPECTED_SHA256,
 ) {
     data class Progress(
         val downloaded: Long,
@@ -81,6 +89,46 @@ class ModelDownloader(
                 part.copyTo(dest, overwrite = true)
                 part.delete()
             }
+            verifyIntegrity(dest)
             onProgress(Progress(dest.length(), dest.length()))
         }
+
+    /** Verifies [file] matches [expectedSizeBytes] and [expectedSha256]. Deletes the file and
+     *  throws [IOException] on mismatch so the next [download] call starts fresh. Skips when the
+     *  pins are unset (size 0 or blank hash) to keep tests + dev-rebuilds unblocked. */
+    private suspend fun verifyIntegrity(file: File) =
+        withContext(Dispatchers.IO) {
+            if (expectedSizeBytes <= 0 && expectedSha256.isBlank()) return@withContext
+
+            if (expectedSizeBytes > 0 && file.length() != expectedSizeBytes) {
+                val actualSize = file.length()
+                file.delete()
+                throw IOException("Model size mismatch: expected $expectedSizeBytes bytes, got $actualSize")
+            }
+            if (expectedSha256.isNotBlank()) {
+                val actual = sha256(file)
+                if (!actual.equals(expectedSha256, ignoreCase = true)) {
+                    file.delete()
+                    throw IOException("Model hash mismatch: expected $expectedSha256, got $actual")
+                }
+            }
+        }
+
+    companion object {
+        /** Streams [file] through SHA-256 in 64 KiB chunks. Lowercase hex output. */
+        suspend fun sha256(file: File): String =
+            withContext(Dispatchers.IO) {
+                val md = MessageDigest.getInstance("SHA-256")
+                file.inputStream().use { input ->
+                    val buf = ByteArray(64 * 1024)
+                    while (true) {
+                        coroutineContext.ensureActive()
+                        val read = input.read(buf)
+                        if (read < 0) break
+                        md.update(buf, 0, read)
+                    }
+                }
+                md.digest().joinToString("") { "%02x".format(it) }
+            }
+    }
 }
