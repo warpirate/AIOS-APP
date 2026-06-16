@@ -19,6 +19,19 @@ class SetAutoRotate(
     override val name = "set_auto_rotate"
     override val sideEffect = SideEffect.Reversible
 
+    override fun captureUndo(args: Map<String, Any?>): UndoSpec? {
+        if (!Settings.System.canWrite(context)) return null
+        return runCatching {
+            val current =
+                Settings.System.getInt(
+                    context.contentResolver,
+                    Settings.System.ACCELEROMETER_ROTATION,
+                    0,
+                )
+            UndoSpec(toolName = name, args = mapOf("on" to (current == 1)))
+        }.getOrNull()
+    }
+
     override fun execute(args: Map<String, Any?>): ToolResult {
         val on = argBool(args["on"]) ?: return ToolResult.Failure("I need to know on or off")
 

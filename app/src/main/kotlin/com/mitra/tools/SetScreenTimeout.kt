@@ -21,6 +21,26 @@ class SetScreenTimeout(
     override val name = "set_screen_timeout"
     override val sideEffect = SideEffect.Reversible
 
+    /** Reads the current timeout (ms) and converts back to seconds for the args shape. Clamps to
+     *  the [15, 1800] range the forward call enforces — if the user previously set a value via
+     *  the system Display screen that sits outside the range (e.g. 5 seconds, 30 minutes+), Undo
+     *  restores the nearest in-range value rather than the literal exotic value. Documented
+     *  trade-off: a faithful undo of "Always on" / "10 seconds" isn't expressible in V1's
+     *  argument schema. */
+    override fun captureUndo(args: Map<String, Any?>): UndoSpec? {
+        if (!Settings.System.canWrite(context)) return null
+        return runCatching {
+            val ms =
+                Settings.System.getInt(
+                    context.contentResolver,
+                    Settings.System.SCREEN_OFF_TIMEOUT,
+                    30_000,
+                )
+            val seconds = (ms / 1000).coerceIn(15, 1800)
+            UndoSpec(toolName = name, args = mapOf("seconds" to seconds))
+        }.getOrNull()
+    }
+
     override fun execute(args: Map<String, Any?>): ToolResult {
         val seconds =
             argInt(args["seconds"])?.coerceIn(15, 1800)

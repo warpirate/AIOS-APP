@@ -23,6 +23,10 @@ sealed interface AutomationAction {
 sealed interface BackendResult {
     data class Success(
         val message: String,
+        /** Optional inverse action captured by the dispatcher pre-execute. Non-null only when the
+         *  underlying tool implements `Tool.captureUndo` AND the forward execute succeeded. UI
+         *  uses this to offer a time-limited Undo affordance on a `Reversible` action card. */
+        val undo: com.mitra.tools.UndoSpec? = null,
     ) : BackendResult
 
     data class Failure(

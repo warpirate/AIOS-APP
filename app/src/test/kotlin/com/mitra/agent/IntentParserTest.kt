@@ -92,6 +92,25 @@ class IntentParserTest {
     }
 
     @Test
+    fun `brightness auto routes to set_brightness_auto`() {
+        val c = parser.route("brightness auto")
+        assertEquals("set_brightness_auto", c?.name)
+        assertEquals(emptyMap<String, Any?>(), c?.args)
+    }
+
+    @Test
+    fun `set brightness to auto routes to set_brightness_auto, not numeric set_brightness`() {
+        val c = parser.route("set brightness to auto")
+        assertEquals("set_brightness_auto", c?.name)
+    }
+
+    @Test
+    fun `adaptive brightness routes to set_brightness_auto`() {
+        val c = parser.route("adaptive brightness on")
+        assertEquals("set_brightness_auto", c?.name)
+    }
+
+    @Test
     fun `volume not confused with brightness`() {
         val c = parser.route("set volume to 30")
         assertEquals("set_media_volume", c?.name)

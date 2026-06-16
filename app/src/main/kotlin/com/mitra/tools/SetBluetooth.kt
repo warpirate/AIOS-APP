@@ -33,6 +33,21 @@ class SetBluetooth(
     override val name = "set_bluetooth"
     override val sideEffect = SideEffect.Reversible
 
+    /** Returns the inverse `on` flag so Undo restores the prior Bluetooth state. Returns null on
+     *  API 33+ (the forward call itself bounces to the settings page, so there's no Mitra-driven
+     *  toggle to reverse) and on API 31+ without `BLUETOOTH_CONNECT` (can't read the adapter
+     *  state safely). Missing permission paths get the bounce when execute runs, not now. */
+    override fun captureUndo(args: Map<String, Any?>): UndoSpec? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasBluetoothConnect()) return null
+        val adapter = getAdapter() ?: return null
+        return runCatching {
+            @Suppress("MissingPermission")
+            val priorOn = adapter.isEnabled
+            UndoSpec(toolName = name, args = mapOf("on" to priorOn))
+        }.getOrNull()
+    }
+
     override fun execute(args: Map<String, Any?>): ToolResult {
         val on = argBool(args["on"]) ?: return ToolResult.Failure("I need to know on or off")
         val adapter = getAdapter() ?: return ToolResult.Failure("This device has no Bluetooth")

@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.RingVolume
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
@@ -130,6 +131,9 @@ private data class ActionCard(
     val detail: String,
     val state: ActionState,
     val call: ToolCall? = null,
+    /** Captured by the dispatcher at execute-time. Non-null only on a successful Reversible run
+     *  whose tool implements `Tool.captureUndo`. UI surfaces an Undo button while this is set. */
+    val undo: com.mitra.tools.UndoSpec? = null,
 ) : ChatItem
 
 private data class Suggestion(
@@ -142,6 +146,10 @@ private data class Suggestion(
 @Composable
 fun ChatScreen(
     brainReady: Boolean,
+    /** Returns true while the brain's background warmup is still running. Polled cheaply each
+     *  recomposition. Surfaced as a calm hint on the input bar so the user doesn't blame Mitra
+     *  for a cold first-token cost they didn't initiate. */
+    isWarmingUp: () -> Boolean = { false },
     buildRuntime: (onChunk: (String) -> Unit) -> AgentRuntime,
     onOpenSettings: () -> Unit = {},
 ) {
@@ -155,6 +163,17 @@ fun ChatScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val tts = remember { TtsReader(context) }
     DisposableEffect(Unit) { onDispose { tts.shutdown() } }
+
+    // Poll the brain's warmup state until it completes. The flag is a Volatile var that Compose
+    // can't subscribe to natively, so we mirror it into a State<Boolean> and stop polling once
+    // it flips. 400ms is well under the cost of being wrong about the hint's visibility.
+    var warming by remember { mutableStateOf(isWarmingUp()) }
+    LaunchedEffect(Unit) {
+        while (warming) {
+            kotlinx.coroutines.delay(400)
+            warming = isWarmingUp()
+        }
+    }
 
     // TTS opt-in. Re-read on every ON_RESUME so toggling the Settings switch and returning to chat
     // takes effect immediately (Settings is a different Compose screen pushed over the same activity).
@@ -249,7 +268,7 @@ fun ChatScreen(
 
     fun cardIndex(id: Int) = items.indexOfFirst { it is ActionCard && it.id == id }
 
-    fun finishCard(id: Int, success: Boolean, detail: String) {
+    fun finishCard(id: Int, success: Boolean, detail: String, undo: com.mitra.tools.UndoSpec? = null) {
         val i = cardIndex(id)
         if (i < 0) return
         val card = items[i] as ActionCard
@@ -257,6 +276,7 @@ fun ChatScreen(
             card.copy(
                 state = if (success) ActionState.DONE else ActionState.FAILED,
                 detail = detail,
+                undo = if (success) undo else null,
             )
         // Stronger native feedback than Compose's LocalHapticFeedback. CONFIRM is API 30+ (rich
         // tactile click); LONG_PRESS is the universal fallback that still feels firm on older OEMs.
@@ -296,6 +316,54 @@ fun ChatScreen(
         scope.launch { activeRuntime?.resume(GateDecision.Cancel) }
     }
 
+    fun undoCard(id: Int) {
+        val i = cardIndex(id)
+        if (i < 0) return
+        val card = items[i] as ActionCard
+        val spec = card.undo ?: return
+        val runtime = activeRuntime ?: return
+        // Clear the undo affordance immediately so a double-tap doesn't fan out two inverse calls
+        // while the first is mid-dispatch. Use CANCELLED so the existing state-pill machinery
+        // visibly distinguishes "undone" from "done" without inventing a new state in V1.
+        items[i] = card.copy(state = ActionState.CANCELLED, undo = null, detail = "Undone")
+        val inverse = ToolCall(spec.toolName, spec.args)
+        val newId = nextId++
+        items.add(
+            ActionCard(
+                id = newId,
+                title = actionTitle(inverse),
+                detail = actionDetail(inverse, context),
+                state = ActionState.RUNNING,
+                call = inverse,
+            ),
+        )
+        scope.launch {
+            runtime.runStep(inverse, source = "undo").collect { event ->
+                when (event) {
+                    is RuntimeEvent.StepCompleted -> {
+                        val r = event.result
+                        finishCard(
+                            id = newId,
+                            success = r is com.mitra.automation.BackendResult.Success,
+                            detail =
+                                when (r) {
+                                    is com.mitra.automation.BackendResult.Success -> r.message
+                                    is com.mitra.automation.BackendResult.Failure -> r.message
+                                },
+                            // Suppress chaining undos-of-undos in V1; the user has the original card
+                            // sitting one row up if they want to re-apply the forward action.
+                            undo = null,
+                        )
+                    }
+                    is RuntimeEvent.Failed -> {
+                        finishCard(newId, success = false, detail = event.reason)
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
+
     fun send(textOverride: String? = null) {
         val text = (textOverride ?: input).trim()
         if (text.isEmpty() || busy) return
@@ -307,7 +375,13 @@ fun ChatScreen(
         input = ""
         items.add(UserMsg(text))
         busy = true
-        val msgIdx = items.size
+        // msgIdx tracks the index of the live Mitra bubble for the current step. After every
+        // PlanReady we OPEN A FRESH bubble below the action card and re-point msgIdx at it, so a
+        // brain Speaking event arriving AFTER the tool dispatch (the agentic-loop "ok, done"
+        // post-tool reply) lands in its own MitraMsg instead of overwriting the ActionCard at the
+        // same slot — that overwrite was the regression where the card + Undo disappeared after a
+        // brain-mediated brightness change.
+        var msgIdx = items.size
         items.add(MitraMsg(""))
         scope.launch {
             // The old onChunk hook is no longer plumbed — the agentic loop emits streaming text
@@ -322,12 +396,16 @@ fun ChatScreen(
                         // Agentic-loop streaming text. Update the in-flight Mitra bubble each
                         // emission so the user sees the reply build up before the (optional)
                         // tool call surfaces and we drop the bubble for an action card.
-                        if (msgIdx < items.size) items[msgIdx] = MitraMsg(event.text)
+                        if (msgIdx < items.size && items[msgIdx] is MitraMsg) {
+                            items[msgIdx] = MitraMsg(event.text)
+                        }
                     }
                     is RuntimeEvent.PlanReady -> {
                         if (event.plan.steps.isNotEmpty()) {
-                            // Drop the streaming bubble in favour of an action card.
-                            if (msgIdx < items.size) items.removeAt(msgIdx)
+                            // Drop the (now-stale) streaming bubble in favour of an action card.
+                            if (msgIdx < items.size && items[msgIdx] is MitraMsg) {
+                                items.removeAt(msgIdx)
+                            }
                             // TODO(phase-2): multi-step plans render one card per step. V1 SingleShotPlanner returns 1 step.
                             val step = event.plan.steps.first()
                             val call = ToolCall(step.toolName, step.args)
@@ -348,6 +426,11 @@ fun ChatScreen(
                                     call = call,
                                 ),
                             )
+                            // Open a fresh bubble for the agentic loop's post-tool brain reply.
+                            // If Done arrives before any Speaking, the bubble stays empty and is
+                            // trimmed in the Done handler so the chat doesn't show a phantom row.
+                            msgIdx = items.size
+                            items.add(MitraMsg(""))
                         }
                     }
                     is RuntimeEvent.StepCompleted -> {
@@ -382,24 +465,47 @@ fun ChatScreen(
                                         is com.mitra.automation.BackendResult.Success -> r.message
                                         is com.mitra.automation.BackendResult.Failure -> r.message
                                     },
+                                undo = (r as? com.mitra.automation.BackendResult.Success)?.undo,
                             )
                         }
                     }
                     is RuntimeEvent.Done -> {
                         if (lastCardId == null && msgIdx < items.size) {
+                            // No tool fired this turn — fill the bubble with whatever the brain
+                            // streamed (or fall back to the runtime's summary string).
                             val spoken = (items[msgIdx] as? MitraMsg)?.text.orEmpty()
                             val msg =
                                 when {
                                     spoken.isNotBlank() -> spoken
                                     event.summary == "nothing to do" -> "I'm not sure how to help with that one yet."
+                                    // IntentParser shortcut path emits "done" — useless as chat
+                                    // text and would just clutter the stream; drop it to empty so
+                                    // the trim below removes the row.
+                                    event.summary == "done" -> ""
                                     else -> event.summary
                                 }
                             items[msgIdx] = MitraMsg(msg)
+                        }
+                        // Trim an empty trailing MitraMsg left by the fresh-bubble-per-PlanReady
+                        // shape when the brain didn't actually say anything after the tool ran
+                        // (the IntentParser path and many tool-only agentic turns hit this).
+                        if (msgIdx < items.size) {
+                            val last = items[msgIdx]
+                            if (last is MitraMsg && last.text.isBlank()) {
+                                items.removeAt(msgIdx)
+                            }
                         }
                     }
                     is RuntimeEvent.Failed -> {
                         if (lastCardId == null && msgIdx < items.size) {
                             items[msgIdx] = MitraMsg("Sorry — ${event.reason}")
+                        }
+                        // Same empty-bubble trim as Done.
+                        if (msgIdx < items.size) {
+                            val last = items[msgIdx]
+                            if (last is MitraMsg && last.text.isBlank()) {
+                                items.removeAt(msgIdx)
+                            }
                         }
                     }
                     is RuntimeEvent.StepStarted, is RuntimeEvent.GateRequested, is RuntimeEvent.Replan -> {
@@ -444,11 +550,43 @@ fun ChatScreen(
                                 busy = busy && index == items.lastIndex,
                                 onSpeak = if (ttsEnabled) ({ tts.speak(item.text) }) else null,
                             )
-                        is ActionCard -> ActionCardView(item, onConfirm = ::runCard, onCancel = ::cancelCard)
+                        is ActionCard ->
+                            ActionCardView(
+                                item,
+                                onConfirm = ::runCard,
+                                onCancel = ::cancelCard,
+                                onUndo = ::undoCard,
+                            )
                     }
                 }
             }
-            FloatingInputBar(value = input, onValueChange = { input = it }, onSend = { send() }, enabled = !busy)
+            if (warming) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(12.dp),
+                        strokeWidth = 1.5.dp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        "Warming up the brain — first message will take a few seconds.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            // Disable send while warming — LiteRT-LM serializes per-Conversation, so a user
+            // message during the warmup turn would either queue silently (looks frozen) or
+            // collide with the prefill. Better to make the wait honest.
+            FloatingInputBar(
+                value = input,
+                onValueChange = { input = it },
+                onSend = { send() },
+                enabled = !busy && !warming,
+            )
             Spacer(Modifier.size(8.dp))
         }
     }
@@ -934,7 +1072,12 @@ private fun ThinkingDots() {
 }
 
 @Composable
-private fun ActionCardView(card: ActionCard, onConfirm: (Int) -> Unit, onCancel: (Int) -> Unit) {
+private fun ActionCardView(
+    card: ActionCard,
+    onConfirm: (Int) -> Unit,
+    onCancel: (Int) -> Unit,
+    onUndo: (Int) -> Unit,
+) {
     val accent =
         when (card.state) {
             ActionState.DONE -> Color(0xFF8FB97D)
@@ -984,6 +1127,28 @@ private fun ActionCardView(card: ActionCard, onConfirm: (Int) -> Unit, onCancel:
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         GhostButton("Cancel", icon = Icons.Filled.Close, onClick = { onCancel(card.id) }, modifier = Modifier.weight(1f))
                         FilledButton("Confirm", icon = Icons.Filled.Check, onClick = { onConfirm(card.id) }, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+            // Undo affordance: only when (a) the forward action succeeded AND (b) the tool
+            // captured an inverse. The button stays visible indefinitely in V1 — the action-cards
+            // spec's 3-second auto-fade requires a progress-line animation we'll wire alongside
+            // the toast-variant card rewrite. Tap once → button disappears (state becomes
+            // CANCELLED so we don't show two stacked Undo buttons after the inverse runs).
+            AnimatedVisibility(
+                visible = card.state == ActionState.DONE && card.undo != null,
+                enter = fadeIn(),
+                exit = fadeOut(),
+            ) {
+                Column {
+                    Spacer(Modifier.size(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        GhostButton(
+                            label = "Undo",
+                            icon = Icons.Filled.RestartAlt,
+                            onClick = { onUndo(card.id) },
+                            modifier = Modifier.weight(1f),
+                        )
                     }
                 }
             }

@@ -23,6 +23,21 @@ class SetRingerMode(
     override val name = "set_ringer_mode"
     override val sideEffect = SideEffect.Reversible
 
+    /** Captures the current ringer mode as one of `ring` / `vibrate` / `silent` so Undo restores
+     *  it precisely. Returns null on unknown ringer values (extremely rare) — withholding the
+     *  affordance beats guessing a state we can't name. */
+    override fun captureUndo(args: Map<String, Any?>): UndoSpec? {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val priorMode =
+            when (am.ringerMode) {
+                AudioManager.RINGER_MODE_NORMAL -> "ring"
+                AudioManager.RINGER_MODE_VIBRATE -> "vibrate"
+                AudioManager.RINGER_MODE_SILENT -> "silent"
+                else -> return null
+            }
+        return UndoSpec(toolName = name, args = mapOf("mode" to priorMode))
+    }
+
     override fun execute(args: Map<String, Any?>): ToolResult {
         val raw = argString(args["mode"]) ?: return ToolResult.Failure("I need ring, vibrate, or silent")
         val mode =

@@ -108,8 +108,14 @@ open class IntentParser : Router {
             timeOfDay(t)?.let { (h, m) -> return ToolCall("set_alarm", mapOf("hour" to h, "minute" to m)) }
         }
 
-        // Brightness: "set brightness to 40", "brightness 50%", "dim the screen", "max brightness"
+        // Brightness: "set brightness to 40", "brightness 50%", "dim the screen", "max brightness",
+        // "auto brightness", "adaptive brightness", "brightness to auto"
         if (t.contains("brightness") || (t.contains("screen") && (t.contains("dim") || t.contains("bright")))) {
+            // Auto / adaptive wins over a numeric match — "set brightness to auto" must NOT route
+            // to set_brightness(level=...) on a fluke digit somewhere in the line.
+            if ("auto" in t || "adaptive" in t || "automatic" in t) {
+                return ToolCall("set_brightness_auto", emptyMap())
+            }
             return when {
                 "max" in t || "full" in t || "brightest" in t -> ToolCall("set_brightness", mapOf("level" to 100))
                 "min" in t || "dim" in t || "lowest" in t || "darkest" in t -> ToolCall("set_brightness", mapOf("level" to 10))

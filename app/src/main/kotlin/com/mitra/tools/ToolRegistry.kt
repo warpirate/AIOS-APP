@@ -21,6 +21,7 @@ object ToolRegistry {
             SendSms(context),
             SetMediaVolume(context),
             SetBrightness(context),
+            SetBrightnessAuto(context),
             SetDnd(context),
             SetRingerMode(context),
             SetAutoRotate(context),

@@ -22,6 +22,22 @@ class SetDnd(
     override val name = "set_dnd"
     override val sideEffect = SideEffect.Reversible
 
+    /** Reads the current interruption filter and returns the inverse `on` flag. Returns null when
+     *  access isn't granted (execute will surface the bounce) or when the current filter is
+     *  ALARMS / NONE (the user had picked a non-priority DND profile manually; "undo" would have
+     *  to pick which they meant, so we withhold the affordance). */
+    override fun captureUndo(args: Map<String, Any?>): UndoSpec? {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (!nm.isNotificationPolicyAccessGranted) return null
+        val priorOn =
+            when (nm.currentInterruptionFilter) {
+                NotificationManager.INTERRUPTION_FILTER_ALL -> false
+                NotificationManager.INTERRUPTION_FILTER_PRIORITY -> true
+                else -> return null
+            }
+        return UndoSpec(toolName = name, args = mapOf("on" to priorOn))
+    }
+
     override fun execute(args: Map<String, Any?>): ToolResult {
         val on = argBool(args["on"]) ?: return ToolResult.Failure("I need to know on or off")
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

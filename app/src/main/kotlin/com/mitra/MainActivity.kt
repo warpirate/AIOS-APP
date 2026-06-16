@@ -22,8 +22,11 @@ import com.mitra.inference.LiteRtBrain
 import com.mitra.inference.ModelDownloader
 import com.mitra.inference.ModelRegistry
 import com.mitra.permissions.Onboarding
+import com.mitra.prefs.ConfirmationMode
+import com.mitra.prefs.UserPrefs
 import com.mitra.safety.AuditLog
 import com.mitra.tools.ToolRegistry
+import com.mitra.ui.AuditHistoryScreen
 import com.mitra.ui.ChatScreen
 import com.mitra.ui.DownloadScreen
 import com.mitra.ui.ErrorScreen
@@ -39,7 +42,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-private enum class Phase { BOOT, WELCOME, DOWNLOAD, LOADING, PERMISSIONS, CHAT, SETTINGS, PERMISSIONS_REVIEW, ERROR }
+private enum class Phase { BOOT, WELCOME, DOWNLOAD, LOADING, PERMISSIONS, CHAT, SETTINGS, PERMISSIONS_REVIEW, ACTIVITY, ERROR }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,6 +55,14 @@ class MainActivity : ComponentActivity() {
         val backend = ManagerApiBackend(toolsByName)
         val audit = AuditLog()
         val context = TurnOnlyContextStore()
+        // Read the user's confirmation aggressiveness per-step so a mid-conversation Settings
+        // change takes effect on the next dispatch (vs. requiring an app restart).
+        val requiresGate: (com.mitra.tools.SideEffect) -> Boolean = { side ->
+            when (UserPrefs.confirmationMode(applicationContext)) {
+                ConfirmationMode.STRICT -> side != com.mitra.tools.SideEffect.None
+                ConfirmationMode.BALANCED -> side == com.mitra.tools.SideEffect.Irreversible
+            }
+        }
         // The runtime is constructed below once the brain is (or isn't) loaded — see AppRoot.
         val modelFile = File(applicationContext.getExternalFilesDir(null), ModelRegistry.MODEL_FILE)
         val cacheDir = applicationContext.cacheDir.path
@@ -61,6 +72,7 @@ class MainActivity : ComponentActivity() {
                     modelFile = modelFile,
                     cacheDir = cacheDir,
                     sideEffectOf = sideEffectOf,
+                    auditEntries = { audit.entries() },
                     buildRuntime = { brain, _ ->
                         // ChatScreen reads streaming text from RuntimeEvent.Speaking; the legacy
                         // onChunk callback is intentionally ignored. brain == null falls through to
@@ -72,6 +84,7 @@ class MainActivity : ComponentActivity() {
                             backends = listOf(backend),
                             context = context,
                             audit = audit,
+                            requiresGate = requiresGate,
                         )
                     },
                 )
@@ -85,6 +98,7 @@ private fun AppRoot(
     modelFile: File,
     cacheDir: String,
     sideEffectOf: (String) -> com.mitra.tools.SideEffect,
+    auditEntries: () -> List<com.mitra.safety.AuditLog.Entry>,
     buildRuntime: (LiteRtBrain?, (String) -> Unit) -> AgentRuntime,
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -166,10 +180,11 @@ private fun AppRoot(
         // (private remember-scoped state) and (b) cancelled any in-flight conversation.sendMessageAsync
         // mid-stream — LiteRT-LM did not always recover, surfacing as LiteRtLmJniException on the
         // next turn. Settings / PermissionsReview now render as a full-bleed overlay on top.
-        Phase.CHAT, Phase.SETTINGS, Phase.PERMISSIONS_REVIEW ->
+        Phase.CHAT, Phase.SETTINGS, Phase.PERMISSIONS_REVIEW, Phase.ACTIVITY ->
             Box(modifier = Modifier.fillMaxSize()) {
                 ChatScreen(
                     brainReady = brain != null,
+                    isWarmingUp = { brain?.warmupComplete == false },
                     buildRuntime = { onChunk -> buildRuntime(brain, onChunk) },
                     onOpenSettings = { phase = Phase.SETTINGS },
                 )
@@ -178,10 +193,17 @@ private fun AppRoot(
                         SettingsScreen(
                             onBack = { phase = Phase.CHAT },
                             onViewPermissions = { phase = Phase.PERMISSIONS_REVIEW },
+                            onViewActivity = { phase = Phase.ACTIVITY },
+                            activityCount = auditEntries().size,
                         )
                     Phase.PERMISSIONS_REVIEW ->
                         PermissionsScreen(
                             mode = PermissionsEntryMode.Review(onBack = { phase = Phase.SETTINGS }),
+                        )
+                    Phase.ACTIVITY ->
+                        AuditHistoryScreen(
+                            entries = auditEntries,
+                            onBack = { phase = Phase.SETTINGS },
                         )
                     else -> Unit
                 }
