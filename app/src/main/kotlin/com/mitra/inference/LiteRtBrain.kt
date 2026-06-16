@@ -169,9 +169,10 @@ class LiteRtBrain(
         // Real execution is dispatched by AgentLoop -> ToolRegistry, not here.
     }
 
-    // Hoisted so [warmup] can prefill against the SAME prompt the real conversation uses —
-    // empty-prompt warmup compiles kernels but skips the largest single first-token cost
-    // (KV-cache prefill of the full ~1.5k-token system surface). Real prompt → real cold cost.
+    // Hoisted as its own property to keep the conversation declaration below scannable. The
+    // earlier in-line warmup() variants reused this Contents to prefill against the same prompt
+    // surface; the warmup approach didn't work (LiteRT-LM doesn't reuse cross-call KV state)
+    // and was replaced by the Application-singleton lifecycle in BrainHolder + MitraApp.
     private val systemInstruction =
         Contents.of(
             """
@@ -235,39 +236,6 @@ class LiteRtBrain(
             ),
         )
 
-    @Volatile var warmupComplete: Boolean = false
-        private set
-
-    /**
-     * Silent background warmup. Runs a tiny throwaway inference to warm the engine: pages the model
-     * into RAM, compiles XNNPACK delegate kernels, primes CPU caches, processes the system prompt
-     * (which is the largest first-token cost on cold start). The real chat conversation is NOT
-     * touched; the warmup uses a separate Conversation that's closed at the end so it leaves no
-     * history. Call once from a background coroutine right after the brain loads.
-     */
-    suspend fun warmup() {
-        // Send a throwaway message through the REAL [conversation] (not a sibling). KV-cache
-        // prefill of the ~1.5k-token system prompt is the largest single cold-start cost and is
-        // owned by the Conversation instance, NOT the engine — so a separate-conversation
-        // warmup compiled kernels but never primed the real cache, leaving the user's first
-        // real message paying the full prefill (~10–20s on the dev Dimensity). After this call
-        // the conversation history contains one "ok" turn plus a tiny reply; the brain's system
-        // prompt is strict enough about NOT narrating fake actions / NOT greeting that the
-        // extra context doesn't visibly distort future replies. The trade is worth it.
-        try {
-            var collected = 0
-            conversation.sendMessageAsync("ok").collect { _ ->
-                collected++
-                // Stop after the brain has produced at least one full message-chunk; that's
-                // enough to confirm prefill + decode kernel paths are hot.
-                if (collected >= 1) return@collect
-            }
-        } catch (_: Throwable) {
-            // Best-effort. If it fails, the first real message just pays the cold cost.
-        } finally {
-            warmupComplete = true
-        }
-    }
 
     /** Streams the reply; the tool call (if any) is attached as soon as the runtime surfaces it. */
     override fun chatStream(userText: String): Flow<BrainTurn> =
