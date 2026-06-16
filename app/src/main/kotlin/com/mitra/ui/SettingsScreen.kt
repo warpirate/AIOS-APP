@@ -20,8 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.mitra.permissions.Permissions
+import com.mitra.prefs.ConfirmationMode
 import com.mitra.prefs.UserPrefs
 
 /**
@@ -61,11 +64,14 @@ import com.mitra.prefs.UserPrefs
 fun SettingsScreen(
     onBack: () -> Unit,
     onViewPermissions: () -> Unit,
+    onViewActivity: () -> Unit,
+    activityCount: Int,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var snapshot by remember { mutableStateOf(Permissions.snapshot(context)) }
     var ttsEnabled by remember { mutableStateOf(UserPrefs.ttsEnabled(context)) }
+    var confirmMode by remember { mutableStateOf(UserPrefs.confirmationMode(context)) }
 
     // System back returns to Chat, not out of app.
     BackHandler(onBack = onBack)
@@ -76,6 +82,7 @@ fun SettingsScreen(
                 if (event == Lifecycle.Event.ON_RESUME) {
                     snapshot = Permissions.snapshot(context)
                     ttsEnabled = UserPrefs.ttsEnabled(context)
+                    confirmMode = UserPrefs.confirmationMode(context)
                 }
             }
         lifecycle.addObserver(observer)
@@ -133,6 +140,37 @@ fun SettingsScreen(
                     )
                 }
 
+                // Section: Activity (trust surface — every tool execution Mitra has run)
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "Activity",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            "What Mitra has done on this device. Tool name and outcome only.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                item {
+                    NavRow(
+                        icon = Icons.Filled.History,
+                        title = "View recent actions",
+                        subtitle = "Latest first. No content, no recipients.",
+                        trailingText =
+                            if (activityCount == 0) {
+                                "None yet"
+                            } else {
+                                "$activityCount logged"
+                            },
+                        onTap = onViewActivity,
+                    )
+                }
+
                 // Section: Preferences
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -170,6 +208,25 @@ fun SettingsScreen(
                         onCheckedChange = {
                             ttsEnabled = it
                             UserPrefs.setTtsEnabled(context, it)
+                        },
+                    )
+                }
+                item {
+                    ToggleRow(
+                        icon = Icons.Filled.Shield,
+                        title = "Strict confirmations",
+                        subtitle =
+                            if (confirmMode == ConfirmationMode.STRICT) {
+                                "On — every state-changing action asks first."
+                            } else {
+                                "Off — only calls and SMS ask first."
+                            },
+                        checked = confirmMode == ConfirmationMode.STRICT,
+                        onCheckedChange = { strict ->
+                            val next =
+                                if (strict) ConfirmationMode.STRICT else ConfirmationMode.BALANCED
+                            confirmMode = next
+                            UserPrefs.setConfirmationMode(context, next)
                         },
                     )
                 }

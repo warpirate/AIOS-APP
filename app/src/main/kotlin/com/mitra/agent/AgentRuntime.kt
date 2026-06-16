@@ -47,6 +47,11 @@ class AgentRuntime(
     private val backends: List<AutomationBackend>,
     private val context: ContextStore,
     private val audit: AuditLog,
+    // Whether a given side-effect class must pause for the ConfirmationGate. Default keeps
+    // V1 behaviour (Irreversible only); MainActivity wires a UserPrefs-backed lambda so
+    // SideEffect.Reversible can additionally gate under STRICT mode. Evaluated per-step so a
+    // mid-conversation Settings change takes effect on the next dispatch.
+    private val requiresGate: (SideEffect) -> Boolean = { it == SideEffect.Irreversible },
 ) {
     @Volatile private var currentGate: Channel<GateDecision>? = null
 
@@ -147,7 +152,7 @@ class AgentRuntime(
         index: Int,
         gate: Channel<GateDecision>,
     ): String? {
-        if (step.sideEffect == SideEffect.Irreversible) {
+        if (requiresGate(step.sideEffect)) {
             emit(RuntimeEvent.GateRequested(index, step))
             val decision = gate.receive()
             if (decision == GateDecision.Cancel) {
@@ -186,6 +191,33 @@ class AgentRuntime(
         val g = currentGate ?: error("AgentRuntime.resume called with no active turn")
         g.send(decision)
     }
+
+    /** UI-driven single-step dispatch — bypasses both [parser] and [brain]. Used by the Undo
+     *  affordance on Reversible action cards: the UI hands back the [UndoSpec] captured at the
+     *  forward execute, we convert it to a [ToolCall], and run it through the same
+     *  [dispatchStep] (so it still gates under STRICT, writes to [audit], and surfaces step
+     *  events) without the brain getting involved. No turn boundary — undo is not a fresh
+     *  conversation turn; it's an attachment to the prior turn the user just performed.
+     */
+    fun runStep(call: ToolCall, source: String): Flow<RuntimeEvent> =
+        flow {
+            check(currentGate == null) { "AgentRuntime.runStep called while another turn is active" }
+            val gate = Channel<GateDecision>(capacity = Channel.RENDEZVOUS)
+            currentGate = gate
+            try {
+                val step = PlannedStep(call.name, call.args, sideEffectOf(call.name))
+                emit(RuntimeEvent.PlanReady(Plan(listOf(step), null, 1.0f)))
+                val failure = dispatchStep(step, index = 0, gate = gate)
+                when (failure) {
+                    null -> emit(RuntimeEvent.Done(summary = source))
+                    CANCEL_SENTINEL -> emit(RuntimeEvent.Failed(reason = "cancelled by user"))
+                    else -> emit(RuntimeEvent.Failed(reason = failure))
+                }
+            } finally {
+                currentGate = null
+                gate.close()
+            }
+        }
 
     companion object {
         const val STEP_CAP = 5

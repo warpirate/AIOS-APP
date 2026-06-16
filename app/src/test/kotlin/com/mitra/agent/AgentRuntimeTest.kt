@@ -38,6 +38,7 @@ class AgentRuntimeTest {
         intentMatch: ToolCall? = null,
         backend: StubBackend = StubBackend(),
         sideEffectOf: (String) -> SideEffect = { SideEffect.None },
+        requiresGate: (SideEffect) -> Boolean = { it == SideEffect.Irreversible },
     ): AgentRuntime =
         AgentRuntime(
             brain = null,
@@ -46,6 +47,7 @@ class AgentRuntimeTest {
             backends = listOf(backend),
             context = TurnOnlyContextStore { 0L },
             audit = AuditLog(),
+            requiresGate = requiresGate,
         )
 
     @Test
@@ -166,6 +168,94 @@ class AgentRuntimeTest {
             val events = rt.run(UserUtterance("set brightness to 50%", "test")).toList()
             assertEquals(1, backend.dispatches.size)
             assertTrue("Reversible must not pause on a gate in V1", events.none { it is RuntimeEvent.GateRequested })
+            assertTrue(events.last() is RuntimeEvent.Done)
+        }
+
+    @Test
+    fun `Reversible step gates under STRICT confirmation mode`() =
+        runBlocking {
+            val backend = StubBackend()
+            val rt =
+                runtimeWith(
+                    intentMatch = ToolCall("set_brightness", mapOf("level" to 50)),
+                    backend = backend,
+                    sideEffectOf = { SideEffect.Reversible },
+                    requiresGate = { it != SideEffect.None },
+                )
+            val collected = mutableListOf<RuntimeEvent>()
+            val job =
+                launch {
+                    rt.run(UserUtterance("set brightness to 50%", "test")).collect { collected += it }
+                }
+            while (collected.none { it is RuntimeEvent.GateRequested }) {
+                delay(1)
+            }
+            assertEquals(
+                "STRICT must hold dispatch until Approve",
+                0,
+                backend.dispatches.size,
+            )
+            rt.resume(GateDecision.Approve)
+            job.join()
+            assertEquals(1, backend.dispatches.size)
+            assertTrue(collected.last() is RuntimeEvent.Done)
+        }
+
+    @Test
+    fun `runStep dispatches a tool call without parser or brain`() =
+        runBlocking {
+            val backend = StubBackend()
+            val rt =
+                AgentRuntime(
+                    brain = null,
+                    parser = fixedParser(null),
+                    sideEffectOf = { SideEffect.Reversible },
+                    backends = listOf(backend),
+                    context = TurnOnlyContextStore { 0L },
+                    audit = AuditLog(),
+                )
+            val events = rt.runStep(ToolCall("set_brightness", mapOf("level" to 30)), source = "undo").toList()
+            assertEquals(1, backend.dispatches.size)
+            assertEquals("set_brightness", backend.dispatches.single().name)
+            assertEquals(30, backend.dispatches.single().args["level"])
+            assertTrue(events.last() is RuntimeEvent.Done)
+        }
+
+    @Test
+    fun `runStep surfaces undo in StepCompleted result`() =
+        runBlocking {
+            val undoSpec = com.mitra.tools.UndoSpec("set_brightness", mapOf("level" to 80))
+            val backend = StubBackend(BackendResult.Success("Brightness set to 30%", undo = undoSpec))
+            val rt =
+                AgentRuntime(
+                    brain = null,
+                    parser = fixedParser(null),
+                    sideEffectOf = { SideEffect.Reversible },
+                    backends = listOf(backend),
+                    context = TurnOnlyContextStore { 0L },
+                    audit = AuditLog(),
+                )
+            val events = rt.runStep(ToolCall("set_brightness", mapOf("level" to 30)), source = "chat").toList()
+            val completed =
+                events.filterIsInstance<RuntimeEvent.StepCompleted>().single().result
+                    as BackendResult.Success
+            assertEquals(undoSpec, completed.undo)
+        }
+
+    @Test
+    fun `None step never gates even under STRICT mode`() =
+        runBlocking {
+            val backend = StubBackend()
+            val rt =
+                runtimeWith(
+                    intentMatch = ToolCall("open_url", mapOf("url" to "x")),
+                    backend = backend,
+                    sideEffectOf = { SideEffect.None },
+                    requiresGate = { it != SideEffect.None },
+                )
+            val events = rt.run(UserUtterance("open x", "test")).toList()
+            assertEquals(1, backend.dispatches.size)
+            assertTrue("None must NEVER pause on a gate", events.none { it is RuntimeEvent.GateRequested })
             assertTrue(events.last() is RuntimeEvent.Done)
         }
 
