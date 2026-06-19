@@ -19,6 +19,7 @@ import com.mitra.agent.TurnOnlyContextStore
 import com.mitra.automation.ManagerApiBackend
 import com.mitra.inference.Brain
 import com.mitra.inference.BrainHolder
+import com.mitra.inference.BrainResidentService
 import com.mitra.inference.ModelDownloader
 import com.mitra.inference.ModelRegistry
 import com.mitra.permissions.Onboarding
@@ -106,7 +107,20 @@ private fun AppRoot(
     var errorMsg by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        phase = if (ModelDownloader(modelFile).isComplete()) Phase.LOADING else Phase.WELCOME
+        val modelOnDisk = ModelDownloader(modelFile).isComplete()
+        val warmBrain = brainHolder.peek()
+        phase =
+            when {
+                !modelOnDisk -> Phase.WELCOME
+                // Process survived (BrainResidentService kept it alive) AND brain is already
+                // constructed — skip LoadingBrainScreen entirely; go straight to chat. This is
+                // the fast-path that makes re-opening the app feel instant.
+                warmBrain != null -> {
+                    brain = warmBrain
+                    if (Onboarding.isComplete(ctx)) Phase.CHAT else Phase.PERMISSIONS
+                }
+                else -> Phase.LOADING
+            }
     }
 
     LaunchedEffect(phase, paused) {
@@ -133,6 +147,21 @@ private fun AppRoot(
             // On launches AFTER the first download completes, prewarm() is a no-op (single-flight).
             brainHolder.prewarm()
             brain = brainHolder.get()
+            // Promote the process to foreground-service tier so swiping the app from recents or
+            // tight LMK pressure don't unload the ~2.6 GB model. Service idempotent + START_STICKY.
+            // Started here (visible activity) to avoid ForegroundServiceStartNotAllowedException
+            // on API 31+.
+            if (brain != null) {
+                BrainResidentService.start(ctx)
+                // Silent KV-cache prefill — eat the ~45s system-prompt + tool-descriptions
+                // prefill cost HERE on LoadingBrainScreen, so the user's first real chat message
+                // returns in ~1-2s instead of 45s. The "hi" turn is consumed off-screen; brain
+                // conversation will contain it (subtle context pollution, accepted V1 trade-off
+                // — amortizing cold-start latency is worth more than a perfectly empty opening).
+                // On warm reopens (process survived), peek() above skips this branch entirely,
+                // so this cost is paid once per cold process.
+                runCatching { brain!!.chatStream("hi").collect { /* discard */ } }
+            }
             phase = if (Onboarding.isComplete(ctx)) Phase.CHAT else Phase.PERMISSIONS
         }
     }

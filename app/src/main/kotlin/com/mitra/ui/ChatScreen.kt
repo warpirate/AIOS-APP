@@ -18,6 +18,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -76,8 +77,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,13 +91,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size as GeometrySize
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -109,6 +116,9 @@ import com.mitra.prefs.UserPrefs
 import com.mitra.safety.ConfirmationGate
 import com.mitra.tts.TtsReader
 import com.mitra.ui.theme.Mitra
+import com.mitra.tools.MitraTimerScheduler
+import com.mitra.tools.TimerStore
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -299,6 +309,19 @@ fun ChatScreen(
         if (card.state != ActionState.CONFIRM) return
         items[i] = card.copy(state = ActionState.CANCELLED)
         scope.launch { activeRuntime?.resume(GateDecision.Cancel) }
+    }
+
+    fun cancelTimerCard(id: Int) {
+        val i = cardIndex(id)
+        if (i < 0) return
+        val card = items[i] as ActionCard
+        // No CONFIRM-state guard: a live timer card is always in DONE state and is owned by the
+        // user, not the gate. MitraTimerScheduler.cancel tears down AlarmManager + TimerStore +
+        // both notifications; the StateFlow update will re-route ActionCardView away from
+        // LiveTimerCard automatically. We flip the card to CANCELLED so the static fall-through
+        // surface reads "Cancelled" rather than "Done" (which would be misleading after a cancel).
+        items[i] = card.copy(state = ActionState.CANCELLED, detail = "Cancelled")
+        MitraTimerScheduler(context).cancel()
     }
 
     fun undoCard(id: Int) {
@@ -541,6 +564,7 @@ fun ChatScreen(
                                 onConfirm = ::runCard,
                                 onCancel = ::cancelCard,
                                 onUndo = ::undoCard,
+                                onCancelTimer = ::cancelTimerCard,
                             )
                     }
                 }
@@ -1017,15 +1041,115 @@ private fun ThinkingDots() {
         animationSpec = infiniteRepeatable(animation = tween(900, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
         label = "alpha",
     )
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        repeat(3) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)),
-            )
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "Thinking",
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+            style = MaterialTheme.typography.bodyMedium,
+            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            repeat(3) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Live count-down variant of the start_timer action card. Used when a tier-4 in-app timer is
+ * active. Observes [TimerStore] so it auto-rebuilds when the timer is scheduled, fires, or
+ * cancelled. When the store goes null, [ActionCardView] falls through to the static DONE /
+ * CANCELLED card instead of this composable.
+ */
+@Composable
+private fun LiveTimerCard(
+    card: ActionCard,
+    timer: com.mitra.tools.ActiveTimer,
+    onCancelTimer: (Int) -> Unit,
+) {
+    var remainingMs by remember(timer.triggerAtElapsedRealtimeMs) {
+        mutableLongStateOf(timer.remainingMs())
+    }
+    LaunchedEffect(timer.triggerAtElapsedRealtimeMs) {
+        while (remainingMs > 0L) {
+            remainingMs = timer.remainingMs()
+            delay(250)
+        }
+    }
+    val totalSec = (remainingMs / 1000).toInt().coerceAtLeast(0)
+    val display = "%d:%02d".format(totalSec / 60, totalSec % 60)
+    val progress =
+        if (timer.totalSeconds <= 0) 0f
+        else (remainingMs.toFloat() / (timer.totalSeconds * 1000f)).coerceIn(0f, 1f)
+    val accent = MaterialTheme.colorScheme.primary
+
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.25f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+                    Canvas(modifier = Modifier.size(56.dp)) {
+                        val stroke = 4.dp.toPx()
+                        drawArc(
+                            color = accent.copy(alpha = 0.18f),
+                            startAngle = -90f,
+                            sweepAngle = 360f,
+                            useCenter = false,
+                            topLeft = Offset(stroke / 2, stroke / 2),
+                            size = GeometrySize(size.width - stroke, size.height - stroke),
+                            style = Stroke(width = stroke, cap = StrokeCap.Round),
+                        )
+                        drawArc(
+                            color = accent,
+                            startAngle = -90f,
+                            sweepAngle = 360f * progress,
+                            useCenter = false,
+                            topLeft = Offset(stroke / 2, stroke / 2),
+                            size = GeometrySize(size.width - stroke, size.height - stroke),
+                            style = Stroke(width = stroke, cap = StrokeCap.Round),
+                        )
+                    }
+                    Icon(
+                        Icons.Filled.Timer,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                Spacer(Modifier.size(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        card.title.ifBlank { "Timer" },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        display,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                IconButton(onClick = { onCancelTimer(card.id) }) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Cancel timer",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }
@@ -1036,7 +1160,23 @@ private fun ActionCardView(
     onConfirm: (Int) -> Unit,
     onCancel: (Int) -> Unit,
     onUndo: (Int) -> Unit,
+    onCancelTimer: (Int) -> Unit,
 ) {
+    val activeTimer by TimerStore.active.collectAsState()
+    // Match by seconds so a historical (already-fired) start_timer card doesn't visually impersonate
+    // the currently-active timer when a new one is scheduled. V1 single-slot: collisions when two
+    // timers share the same duration are accepted (can't disambiguate without identity tracking).
+    val cardSeconds = (card.call?.args?.get("seconds") as? Number)?.toInt()
+    val isLiveTimer =
+        card.call?.name == "start_timer" &&
+            card.state == ActionState.DONE &&
+            activeTimer != null &&
+            cardSeconds != null &&
+            cardSeconds == activeTimer!!.totalSeconds
+    if (isLiveTimer) {
+        LiveTimerCard(card = card, timer = activeTimer!!, onCancelTimer = onCancelTimer)
+        return
+    }
     val accent =
         when (card.state) {
             ActionState.DONE -> Color(0xFF8FB97D)

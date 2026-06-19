@@ -40,6 +40,23 @@ class BrainHolder(
      *  is in flight. */
     suspend fun get(): Brain? = ensureStarted().await()
 
+    /** Non-suspending peek. Returns the already-constructed brain if [prewarm] / [get] has
+     *  finished AND construction succeeded. Returns null if construction hasn't run yet,
+     *  is in flight, or failed. Lets [com.mitra.MainActivity] skip the LoadingBrainScreen
+     *  entirely on launches where the process (and therefore [BrainHolder]) survived. */
+    fun peek(): Brain? {
+        val d = deferred ?: return null
+        return if (d.isCompleted) {
+            try {
+                d.getCompleted()
+            } catch (_: Throwable) {
+                null
+            }
+        } else {
+            null
+        }
+    }
+
     private suspend fun ensureStarted(): CompletableDeferred<Brain?> {
         deferred?.let { return it }
         return mutex.withLock {

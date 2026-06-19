@@ -371,9 +371,22 @@ fun LoadingBrainScreen() {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Loading the model into memory. First time takes a few seconds.",
+                "Warming up Mitra. This is a one-time cost on cold start; replies after this will be instant.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(24.dp))
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth(fraction = 0.6f).height(4.dp).clip(RoundedCornerShape(2.dp)),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            )
+            Spacer(Modifier.height(20.dp))
+            Text(
+                "Stays warm in the background — next launch is instant.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center,
             )
         }

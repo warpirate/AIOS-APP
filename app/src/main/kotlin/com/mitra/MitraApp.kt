@@ -1,10 +1,16 @@
 package com.mitra
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import com.mitra.inference.BrainHolder
+import com.mitra.inference.BrainResidentService
 import com.mitra.inference.LiteRtBrain
 import com.mitra.inference.ModelDownloader
 import com.mitra.inference.ModelRegistry
+import com.mitra.tools.TimerReceiver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import java.io.File
@@ -35,6 +41,56 @@ class MitraApp : Application() {
             )
         if (ModelDownloader(modelFile).isComplete()) {
             brainHolder.prewarm()
+        }
+        ensureTimerNotificationChannels()
+        BrainResidentService.ensureChannel(this)
+    }
+
+    /** Two timer notification channels — silent running + audible alarm. See
+     *  docs/superpowers/specs/2026-06-18-timer-live-ux-design.md. Idempotent. Deletes the
+     *  legacy single-channel id from earlier builds; no-op on fresh installs. */
+    private fun ensureTimerNotificationChannels() {
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+
+        nm.deleteNotificationChannel(TimerReceiver.LEGACY_CHANNEL_ID)
+
+        if (nm.getNotificationChannel(TimerReceiver.CHANNEL_RUNNING_ID) == null) {
+            val running =
+                NotificationChannel(
+                    TimerReceiver.CHANNEL_RUNNING_ID,
+                    TimerReceiver.CHANNEL_RUNNING_NAME,
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    description = TimerReceiver.CHANNEL_RUNNING_DESCRIPTION
+                    enableVibration(false)
+                    setSound(null, null)
+                    setShowBadge(false)
+                }
+            nm.createNotificationChannel(running)
+        }
+
+        if (nm.getNotificationChannel(TimerReceiver.CHANNEL_ALARM_ID) == null) {
+            val alarm =
+                NotificationChannel(
+                    TimerReceiver.CHANNEL_ALARM_ID,
+                    TimerReceiver.CHANNEL_ALARM_NAME,
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = TimerReceiver.CHANNEL_ALARM_DESCRIPTION
+                    enableVibration(true)
+                    // Bypass Do Not Disturb so a scheduled timer alarm rings even when the user
+                    // had DnD on. ACCESS_NOTIFICATION_POLICY is declared in the manifest already
+                    // (for SetDnd / SetRingerMode). Matches the OS alarm clock behaviour.
+                    setBypassDnd(true)
+                    setSound(
+                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build(),
+                    )
+                }
+            nm.createNotificationChannel(alarm)
         }
     }
 }

@@ -65,11 +65,10 @@ class AgentRuntime(
                 parser.route(utterance.text)?.let { call ->
                     val step = PlannedStep(call.name, call.args, sideEffectOf(call.name))
                     emit(RuntimeEvent.PlanReady(Plan(listOf(step), null, 1.0f)))
-                    val failure = dispatchStep(step, index = 0, gate = gate)
-                    when (failure) {
-                        null -> emit(RuntimeEvent.Done(summary = "done"))
-                        CANCEL_SENTINEL -> emit(RuntimeEvent.Failed(reason = "cancelled by user"))
-                        else -> emit(RuntimeEvent.Failed(reason = failure))
+                    when (val outcome = dispatchStep(step, index = 0, gate = gate)) {
+                        is StepOutcome.Success -> emit(RuntimeEvent.Done(summary = outcome.message.ifBlank { "done" }))
+                        is StepOutcome.Cancelled -> emit(RuntimeEvent.Failed(reason = "cancelled by user"))
+                        is StepOutcome.Failure -> emit(RuntimeEvent.Failed(reason = outcome.message))
                     }
                     return@flow
                 }
@@ -117,14 +116,8 @@ class AgentRuntime(
 
                     val step = PlannedStep(call.name, call.args, sideEffectOf(call.name))
                     emit(RuntimeEvent.PlanReady(Plan(listOf(step), null, 1.0f)))
-                    val failure = dispatchStep(step, index = stepIndex, gate = gate)
-                    val cancelled = failure == CANCEL_SENTINEL
-                    val resultMap =
-                        buildResultMap(
-                            toolName = call.name,
-                            failure = if (cancelled) null else failure,
-                            cancelled = cancelled,
-                        )
+                    val outcome = dispatchStep(step, index = stepIndex, gate = gate)
+                    val resultMap = buildResultMap(outcome)
                     stepIndex++
                     stream =
                         try {
@@ -144,20 +137,29 @@ class AgentRuntime(
             }
         }
 
-    /** Returns null on success, the failure reason string on backend failure, or
-     *  [CANCEL_SENTINEL] on user cancellation at the gate. Emits StepStarted /
-     *  StepCompleted / GateRequested events along the way. */
+    /** Outcome of a single dispatched step. Carries the real backend message so the brain can
+     *  reason over it (e.g. `query_contacts` returning "Found Mumma — mobile +91..."). Before
+     *  this was extracted, [buildResultMap] hardcoded `"tool $toolName ran"` and dropped the
+     *  actual content on the floor — brain narrated blind. */
+    private sealed interface StepOutcome {
+        data class Success(val message: String) : StepOutcome
+        data class Failure(val message: String) : StepOutcome
+        data object Cancelled : StepOutcome
+    }
+
+    /** Emits StepStarted / StepCompleted / GateRequested along the way; returns the typed
+     *  outcome so callers can route to Done / Failed and feed the brain real content. */
     private suspend fun FlowCollector<RuntimeEvent>.dispatchStep(
         step: PlannedStep,
         index: Int,
         gate: Channel<GateDecision>,
-    ): String? {
+    ): StepOutcome {
         if (requiresGate(step.sideEffect)) {
             emit(RuntimeEvent.GateRequested(index, step))
             val decision = gate.receive()
             if (decision == GateDecision.Cancel) {
                 audit.record(step.toolName, step.sideEffect, ok = false)
-                return CANCEL_SENTINEL
+                return StepOutcome.Cancelled
             }
         }
         emit(RuntimeEvent.StepStarted(index, step))
@@ -174,16 +176,16 @@ class AgentRuntime(
         )
         emit(RuntimeEvent.StepCompleted(index, step, result))
         return when (result) {
-            is BackendResult.Success -> null
-            is BackendResult.Failure -> result.message
+            is BackendResult.Success -> StepOutcome.Success(result.message)
+            is BackendResult.Failure -> StepOutcome.Failure(result.message)
         }
     }
 
-    private fun buildResultMap(toolName: String, failure: String?, cancelled: Boolean): Map<String, Any?> =
-        when {
-            cancelled -> mapOf("cancelled" to true)
-            failure == null -> mapOf("ok" to true, "message" to "tool $toolName ran")
-            else -> mapOf("ok" to false, "error" to failure)
+    private fun buildResultMap(outcome: StepOutcome): Map<String, Any?> =
+        when (outcome) {
+            is StepOutcome.Cancelled -> mapOf("cancelled" to true)
+            is StepOutcome.Success -> mapOf("ok" to true, "message" to outcome.message)
+            is StepOutcome.Failure -> mapOf("ok" to false, "error" to outcome.message)
         }
 
     /** Called by UI in response to [RuntimeEvent.GateRequested]. */
@@ -207,11 +209,10 @@ class AgentRuntime(
             try {
                 val step = PlannedStep(call.name, call.args, sideEffectOf(call.name))
                 emit(RuntimeEvent.PlanReady(Plan(listOf(step), null, 1.0f)))
-                val failure = dispatchStep(step, index = 0, gate = gate)
-                when (failure) {
-                    null -> emit(RuntimeEvent.Done(summary = source))
-                    CANCEL_SENTINEL -> emit(RuntimeEvent.Failed(reason = "cancelled by user"))
-                    else -> emit(RuntimeEvent.Failed(reason = failure))
+                when (val outcome = dispatchStep(step, index = 0, gate = gate)) {
+                    is StepOutcome.Success -> emit(RuntimeEvent.Done(summary = source))
+                    is StepOutcome.Cancelled -> emit(RuntimeEvent.Failed(reason = "cancelled by user"))
+                    is StepOutcome.Failure -> emit(RuntimeEvent.Failed(reason = outcome.message))
                 }
             } finally {
                 currentGate = null
@@ -221,7 +222,6 @@ class AgentRuntime(
 
     companion object {
         const val STEP_CAP = 5
-        private const val CANCEL_SENTINEL = "__cancelled__"
         private const val JNI_FAILURE_REASON = "I lost my train of thought. Mind sending that again?"
     }
 }

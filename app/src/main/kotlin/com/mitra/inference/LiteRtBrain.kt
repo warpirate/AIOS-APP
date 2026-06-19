@@ -240,6 +240,10 @@ class LiteRtBrain(
     /** Streams the reply; the tool call (if any) is attached as soon as the runtime surfaces it. */
     override fun chatStream(userText: String): Flow<BrainTurn> =
         flow {
+            // DevMode latency instrumentation. Reads via `adb logcat -s MitraTTFT:*`. Cheap enough
+            // to leave on in debug builds; rip out (or gate on BuildConfig.DEBUG) before V1 ship.
+            val t0 = android.os.SystemClock.elapsedRealtime()
+            var firstTokenLogged = false
             var acc = ""
             var call: ToolCall? = null
             // No /no_think here — that's a Qwen-only switch. Gemma's reasoning is curbed via the system
@@ -248,8 +252,21 @@ class LiteRtBrain(
                 val piece = textOf(msg)
                 acc = if (piece.isNotEmpty() && piece.startsWith(acc)) piece else acc + piece
                 msg.toolCalls.firstOrNull()?.let { call = ToolCall(it.name, argsToMap(it.arguments)) }
+                if (!firstTokenLogged && (acc.isNotEmpty() || call != null)) {
+                    firstTokenLogged = true
+                    val ttftMs = android.os.SystemClock.elapsedRealtime() - t0
+                    android.util.Log.i(
+                        "MitraTTFT",
+                        "first-token=${ttftMs}ms userTextLen=${userText.length} accLen=${acc.length} hasToolCall=${call != null}",
+                    )
+                }
                 emit(BrainTurn(sanitize(acc), call))
             }
+            val totalMs = android.os.SystemClock.elapsedRealtime() - t0
+            android.util.Log.i(
+                "MitraTTFT",
+                "turn-complete totalMs=$totalMs replyLen=${acc.length}",
+            )
         }.flowOn(Dispatchers.IO)
 
     /**

@@ -7,13 +7,19 @@ import android.provider.AlarmClock
 import java.util.Calendar
 
 /**
- * Starts a countdown timer via the system clock app (no permission needed). Reversible.
+ * Starts a countdown timer. Reversible.
  *
  * OEM clocks vary in `ACTION_SET_TIMER` support — OnePlus / ColorOS in particular often advertise
  * the action via a stub that just toasts "no timer," so a bare `startActivity` looks successful
- * to us. We probe with `PackageManager.resolveActivity` first; if the system declines, we try a
- * known-good clock package list explicitly; if all that fails, we fall back to `ACTION_SET_ALARM`
- * at now + duration (universally supported).
+ * to us. Four-tier fallback chain:
+ *
+ *  1. Default resolver for `ACTION_SET_TIMER` — fastest, uses whatever clock the user picked.
+ *  2. Explicit clock packages (Google Clock first, then AOSP / Samsung / OnePlus / ColorOS) — handles
+ *     OxygenOS / ColorOS stubs that fail the default resolver.
+ *  3. `ACTION_SET_ALARM` at now + duration — universally supported by clock apps.
+ *  4. In-app fallback ([MitraTimerScheduler]) — AlarmManager broadcast + Mitra notification. Used on
+ *     devices like OnePlus Nord 2T (OxygenOS 13) where every clock-app path above either resolves
+ *     to a stub or returns "no clock app." See plan.md right-now #4.
  */
 class StartTimer(
     private val context: Context,
@@ -67,7 +73,13 @@ class StartTimer(
             val launched = runCatching { context.startActivity(alarmIntent) }.isSuccess
             if (launched) return ToolResult.Success(String.format("Alarm set for %02d:%02d (your clock has no timer)", hour, minute))
         }
-        return ToolResult.Failure("Couldn't start a timer on this device")
+
+        // 4. In-app fallback — AlarmManager broadcast → Mitra notification. No clock app required.
+        return when (MitraTimerScheduler(context).schedule(seconds, label)) {
+            MitraTimerScheduler.Result.Exact -> ToolResult.Success(timerMessage(seconds))
+            MitraTimerScheduler.Result.Inexact -> ToolResult.Success("${timerMessage(seconds)} (approximate — exact alarms not granted)")
+            MitraTimerScheduler.Result.Failure -> ToolResult.Failure("Couldn't start a timer on this device")
+        }
     }
 
     private fun isInstalled(pm: PackageManager, pkg: String): Boolean =

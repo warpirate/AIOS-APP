@@ -61,6 +61,33 @@
     <uses-permission android:name="android.permission.SEND_SMS" />
 
     <!--
+      In-app timer fallback (StartTimer tier 4 → MitraTimerScheduler + TimerReceiver). On stock
+      OxygenOS 13 / Nord 2T no clock app honours ACTION_SET_TIMER or ACTION_SET_ALARM, so Mitra
+      schedules its own AlarmManager broadcast and posts a notification when it fires.
+
+      - USE_EXACT_ALARM (API 33+): install-time grant for alarm-clock-class apps. Mitra qualifies.
+      - SCHEDULE_EXACT_ALARM (API 31-32): pre-USE_EXACT_ALARM form; on API 31+ the user can revoke
+        it in app info, in which case MitraTimerScheduler falls back to setAndAllowWhileIdle.
+      - POST_NOTIFICATIONS (API 33+): runtime permission; without it the timer still fires but the
+        notification silently drops.
+      - VIBRATE: timer notification channel enables vibration.
+    -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!--
+      Foreground service that keeps the ~2.6 GB Gemma 4 E2B model resident in RAM across activity
+      teardown / app-swipe. Eliminates the 6-12 s cold-load on re-launch. FOREGROUND_SERVICE is the
+      base permission (API 28+); FOREGROUND_SERVICE_SPECIAL_USE is required from API 34+ since the
+      service does not map to a standard FGS type (mediaPlayback / location / dataSync etc). The
+      PROPERTY_SPECIAL_USE_FGS_SUBTYPE on the <service> declaration documents the intent.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!--
       Android 11+ package visibility. Without these the system clock app is invisible to our
       PackageManager probes (StartTimer falls through to its last-resort path on every device),
       and launcher app discovery (open_app) returns an empty list.
@@ -107,5 +134,32 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          Tier-4 in-app timer fallback receiver. Private (android:exported="false") — only Mitra's
+          own AlarmManager broadcast can target it. Action string is namespaced.
+        -->
+        <receiver
+            android:name=".tools.TimerReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.mitra.tools.action.TIMER_FIRE" />
+                <action android:name="com.mitra.tools.action.TIMER_CANCEL" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+          Brain-resident foreground service. Keeps the process at FGS oom-adj so the LLM stays
+          in RAM. specialUse type because no standard FGS category fits "hold an on-device LLM
+          resident"; the property documents the subtype.
+        -->
+        <service
+            android:name=".inference.BrainResidentService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="on_device_llm_resident" />
+        </service>
     </application>
 </manifest>
